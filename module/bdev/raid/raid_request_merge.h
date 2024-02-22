@@ -16,10 +16,7 @@
 #include "ht.h"
 
 #define MAX_HT_STRING_LEN 35
-#define PARITY_STRIP 1
-
-#define SPDK_NOTICELOG(...) \
-    spdk_log(SPDK_LOG_NOTICE, __FILE__, __LINE__, __func__, __VA_ARGS__)
+#define PARITY_STRIP 0
 
 enum raid_request_merge_status {
     RAID_REQUEST_MERGE_STATUS_COMPLETE = 0,
@@ -38,7 +35,7 @@ struct raid_request_tree {
     uint64_t size;
 };
 
-int raid_request_catch(struct raid_bdev_io *raid_io);
+int raid_request_catch(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_io);
 void raid_merge_request_abort(struct raid_bdev_io *raid_io);
 
 #endif /* SPDK_BDEV_RAID_MERGE_REQUESTS_INTERNAL_H*/

@@ -50,8 +50,8 @@ raid_create_big_write_request(char *stripe_key, struct raid_bdev_io **big_raid_b
     struct spdk_bdev_io *bdev_io;
     struct spdk_bdev_io *current_request_bdev_io;
     struct raid_bdev_io *raid_io;
-    struct raid_request_tree *stripe_tree;
-    struct raid_write_request *current_request;
+    struct raid_request_tree *stripe_tree = NULL;
+    struct raid_write_request *current_request = NULL;
     struct spdk_io_channel *ch;
     struct spdk_bdev_channel *channel;
     struct raid_bdev *raid_bdev = NULL;
@@ -66,7 +66,6 @@ raid_create_big_write_request(char *stripe_key, struct raid_bdev_io **big_raid_b
     
     stripe_tree = ht_get(raid_ht, stripe_key);
     current_request = RB_MIN(raid_addr_tree, &stripe_tree->tree);
-
     current_request_bdev_io = spdk_bdev_io_from_ctx(current_request->bdev_io);
     raid_bdev = current_request->bdev_io->raid_bdev;
     bdev = &raid_bdev->bdev;
@@ -82,7 +81,7 @@ raid_create_big_write_request(char *stripe_key, struct raid_bdev_io **big_raid_b
         return rc;
     }
 
-    ch = spdk_bdev_get_io_channel(desc);
+    ch = spdk_bdev_get_io_channel(desc);;
     channel = (struct spdk_bdev_channel *)spdk_io_channel_get_ctx(ch);
 
     bdev_io = (struct spdk_bdev_io *)bdev_channel_get_io(channel);
@@ -133,7 +132,7 @@ raid_create_big_write_request(char *stripe_key, struct raid_bdev_io **big_raid_b
 }
 
 int
-raid_request_catch(struct raid_bdev_io *raid_io)
+raid_request_catch(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_io)
 {
     struct raid_write_request *write_request;
     struct spdk_bdev_io *bdev_io;
@@ -146,11 +145,12 @@ raid_request_catch(struct raid_bdev_io *raid_io)
     int rc;
 
     write_request = malloc(sizeof(struct raid_write_request));
+    write_request->bdev_io = raid_io;
     bdev_io = spdk_bdev_io_from_ctx(raid_io);
     raid_bdev = raid_io->raid_bdev;
     max_tree_size = raid_bdev->num_base_bdevs - PARITY_STRIP;
 
-    if (raid_ht == NULL) raid_ht = ht_create();
+    if (raid_ht == NULL) raid_ht = ht_create(); 
 
     start_strip_idx = bdev_io->u.bdev.offset_blocks >> raid_bdev->strip_size_shift;
     write_request->addr = bdev_io->u.bdev.offset_blocks * bdev_io->bdev->blocklen;
@@ -158,9 +158,8 @@ raid_request_catch(struct raid_bdev_io *raid_io)
     snprintf(stripe_key, sizeof stripe_key, "%lu", stripe_index);
     stripe_tree = ht_get(raid_ht, stripe_key);
 
-    if (stripe_tree == NULL)
-    {
-        stripe_tree = malloc(sizeof *stripe_tree);
+    if (stripe_tree == NULL) {
+        stripe_tree = malloc(sizeof(struct raid_request_tree));
         stripe_tree->size = 0;
         RB_INIT(&stripe_tree->tree);
         ht_set(raid_ht, stripe_key, stripe_tree);
@@ -170,13 +169,11 @@ raid_request_catch(struct raid_bdev_io *raid_io)
     stripe_tree->size++;
 
     if (stripe_tree->size == max_tree_size) {
-        struct raid_bdev_io *big_raid_bdev_io;
-        rc = raid_create_big_write_request(stripe_key, &big_raid_bdev_io);
-        if (rc != 0)
-        {
-            SPDK_ERRLOG("Failed to create big request\n");
-            return RAID_REQUEST_MERGE_STATUS_FAILED;
-        }
+
+        rc = raid_create_big_write_request(stripe_key, big_raid_io);
+
+        if (rc != 0) return RAID_REQUEST_MERGE_STATUS_FAILED;
+
         struct raid_write_request *current_request;
         RB_FOREACH(current_request, raid_addr_tree, &stripe_tree->tree) {
             raid_bdev_io_complete(current_request->bdev_io, SPDK_BDEV_IO_STATUS_SUCCESS);
