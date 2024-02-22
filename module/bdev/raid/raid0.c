@@ -10,7 +10,7 @@
 #include "spdk/thread.h"
 #include "spdk/string.h"
 #include "spdk/util.h"
-
+#include "raid_request_merge.h"
 #include "spdk/log.h"
 
 /*
@@ -74,6 +74,8 @@ raid0_submit_rw_request(struct raid_bdev_io *raid_io)
 	uint64_t			end_strip;
 	struct raid_base_bdev_info	*base_info;
 	struct spdk_io_channel		*base_ch;
+	bool merged_request_flag = false;
+	int merged_request_status;
 
 	start_strip = bdev_io->u.bdev.offset_blocks >> raid_bdev->strip_size_shift;
 	end_strip = (bdev_io->u.bdev.offset_blocks + bdev_io->u.bdev.num_blocks - 1) >>
@@ -116,10 +118,28 @@ raid0_submit_rw_request(struct raid_bdev_io *raid_io)
 						 pd_lba, pd_blocks, raid0_bdev_io_completion,
 						 raid_io, &io_opts);
 	} else if (bdev_io->type == SPDK_BDEV_IO_TYPE_WRITE) {
-		ret = spdk_bdev_writev_blocks_ext(base_info->desc, base_ch,
+
+		if (!merged_request_flag) {
+
+			struct raid_bdev_io *big_raid_io;
+			merged_request_status = raid_request_catch(raid_io, &big_raid_io);
+
+			switch (merged_request_status) {
+			case RAID_REQUEST_MERGE_STATUS_COMPLETE:
+				merged_request_flag = true;
+				raid0_submit_rw_request(big_raid_io);
+				break;
+			case RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS: break;
+			case RAID_REQUEST_MERGE_STATUS_FAILED:
+				SPDK_ERRLOG("Failed to merge requests!\n");
+				assert(0);
+			}
+		} else {
+			ret = spdk_bdev_writev_blocks_ext(base_info->desc, base_ch,
 						  bdev_io->u.bdev.iovs, bdev_io->u.bdev.iovcnt,
 						  pd_lba, pd_blocks, raid0_bdev_io_completion,
 						  raid_io, &io_opts);
+		}
 	} else {
 		SPDK_ERRLOG("Recvd not supported io type %u\n", bdev_io->type);
 		assert(0);
