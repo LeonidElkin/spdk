@@ -48,6 +48,60 @@ _raid0_submit_rw_request(void *_raid_io)
 	raid0_submit_rw_request(raid_io);
 }
 
+static struct raid_bdev_merged_request
+raid0_get_info_for_merged_request(struct raid_bdev_io *raid_io) {
+	struct spdk_bdev_io		*bdev_io = spdk_bdev_io_from_ctx(raid_io);
+	struct raid_bdev_io_channel	*raid_ch = raid_io->raid_ch;
+	struct raid_bdev		*raid_bdev = raid_io->raid_bdev;
+	struct raid_base_bdev_info	*base_info;
+	struct spdk_io_channel		*base_ch;
+	struct spdk_bdev_ext_io_opts	io_opts = {};
+	uint64_t pd_strip;
+	uint32_t offset_in_strip;
+	uint64_t pd_lba;
+	uint64_t pd_blocks;
+	uint8_t	pd_idx;
+    uint64_t start_strip;
+	uint64_t end_strip;
+
+	start_strip = bdev_io->u.bdev.offset_blocks >> raid_bdev->strip_size_shift;
+	end_strip = (bdev_io->u.bdev.offset_blocks + bdev_io->u.bdev.num_blocks - 1) >>
+		    raid_bdev->strip_size_shift;
+	if (start_strip != end_strip && raid_bdev->num_base_bdevs > 1) {
+		assert(false);
+		SPDK_ERRLOG("I/O spans strip boundary!\n");
+		raid_bdev_io_complete(raid_io, SPDK_BDEV_IO_STATUS_FAILED);
+	}
+
+    SPDK_ERRLOG("Block 6.5\n");
+
+    pd_strip = start_strip / raid_bdev->num_base_bdevs;
+	pd_idx = start_strip % raid_bdev->num_base_bdevs;
+	offset_in_strip = bdev_io->u.bdev.offset_blocks & (raid_bdev->strip_size - 1);
+	pd_lba = (pd_strip << raid_bdev->strip_size_shift) + offset_in_strip;
+	pd_blocks = bdev_io->u.bdev.num_blocks;
+	base_info = &raid_bdev->base_bdev_info[pd_idx];
+	if (base_info->desc == NULL) {
+		SPDK_ERRLOG("base bdev desc null for pd_idx %u\n", pd_idx);
+		assert(0);
+	}
+
+    raid_ch = raid_io->raid_ch;
+
+    assert(raid_ch != NULL);
+	assert(raid_ch->base_channel);
+	base_ch = raid_ch->base_channel[pd_idx];
+
+	io_opts.size = sizeof(io_opts);
+	io_opts.memory_domain = bdev_io->u.bdev.memory_domain;
+	io_opts.memory_domain_ctx = bdev_io->u.bdev.memory_domain_ctx;
+	io_opts.metadata = bdev_io->u.bdev.md_buf;
+
+	struct raid_bdev_merged_request merged_request = {base_info, base_ch, pd_lba, pd_blocks, io_opts};
+
+	return merged_request;
+}
+
 /*
  * brief:
  * raid0_submit_rw_request function is used to submit I/O to the correct
@@ -74,7 +128,6 @@ raid0_submit_rw_request(struct raid_bdev_io *raid_io)
 	uint64_t			end_strip;
 	struct raid_base_bdev_info	*base_info;
 	struct spdk_io_channel		*base_ch;
-	bool merged_request_flag = false;
 	int merged_request_status;
 
 	start_strip = bdev_io->u.bdev.offset_blocks >> raid_bdev->strip_size_shift;
@@ -119,27 +172,31 @@ raid0_submit_rw_request(struct raid_bdev_io *raid_io)
 						 raid_io, &io_opts);
 	} else if (bdev_io->type == SPDK_BDEV_IO_TYPE_WRITE) {
 
-		if (!merged_request_flag) {
+		struct raid_bdev_io* big_raid_io;
+		SPDK_ERRLOG("Entering raid request_catch\n");
+		merged_request_status = raid_request_catch(raid_io, &big_raid_io);
+		SPDK_ERRLOG("Quiting raid request_catch\n");
 
-			struct raid_bdev_io *big_raid_io;
-			merged_request_status = raid_request_catch(raid_io, &big_raid_io);
-
-			switch (merged_request_status) {
+		switch (merged_request_status) {
 			case RAID_REQUEST_MERGE_STATUS_COMPLETE:
-				merged_request_flag = true;
+				struct raid_bdev_merged_request merged_request = raid0_get_info_for_merged_request(big_raid_io);
+				struct spdk_bdev_io	*big_bdev_io = spdk_bdev_io_from_ctx(big_raid_io);
+				ret = spdk_bdev_writev_blocks_ext( merged_request.base_info->desc,  merged_request.base_ch,
+							big_bdev_io->u.bdev.iovs, big_bdev_io->u.bdev.iovcnt,
+							merged_request.pd_lba,  merged_request.pd_blocks, raid0_bdev_io_completion,
+							big_raid_io, &(merged_request.io_opts));
 				raid0_submit_rw_request(big_raid_io);
 				break;
-			case RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS: break;
+			case RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS:
+				SPDK_ERRLOG("RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS\n");
+				return;
 			case RAID_REQUEST_MERGE_STATUS_FAILED:
+				SPDK_ERRLOG("RAID_REQUEST_MERGE_STATUS_FAILED\n");
 				SPDK_ERRLOG("Failed to merge requests!\n");
-				assert(0);
-			}
-		} else {
-			ret = spdk_bdev_writev_blocks_ext(base_info->desc, base_ch,
-						  bdev_io->u.bdev.iovs, bdev_io->u.bdev.iovcnt,
-						  pd_lba, pd_blocks, raid0_bdev_io_completion,
-						  raid_io, &io_opts);
+				assert(false);
 		}
+	
+		
 	} else {
 		SPDK_ERRLOG("Recvd not supported io type %u\n", bdev_io->type);
 		assert(0);

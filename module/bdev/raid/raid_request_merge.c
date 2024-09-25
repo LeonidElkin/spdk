@@ -37,59 +37,30 @@ clear_tree(struct raid_request_tree *tree)
     tree->size = 0;
 }
 
-static void
-tmp_bdev_event_cb(enum spdk_bdev_event_type type, struct spdk_bdev *bdev, void *ctx)
-{
-    SPDK_NOTICELOG("Unexpected event type: %d\n", type);
-}
-
 static int
 raid_create_big_write_request(char *stripe_key, struct raid_bdev_io **big_raid_bdev_io)
 {
-    struct spdk_bdev_desc *desc;
-    struct spdk_bdev_io *bdev_io;
     struct spdk_bdev_io *current_request_bdev_io;
-    struct raid_bdev_io *raid_io;
-    struct raid_request_tree *stripe_tree = NULL;
-    struct raid_write_request *current_request = NULL;
-    struct spdk_io_channel *ch;
-    struct spdk_bdev_channel *channel;
-    struct raid_bdev *raid_bdev = NULL;
-    struct spdk_bdev *bdev = NULL;
-    struct iovec *iovs = NULL;
+    struct spdk_bdev_io *min_request_bdev_io;
+    struct raid_request_tree *stripe_tree;
+    struct raid_write_request *current_request;
+    struct raid_write_request *min_request ;
+    struct raid_bdev *raid_bdev ;
+    struct spdk_bdev *bdev ;
+    struct iovec *iovs = malloc(sizeof(struct iovec));
     size_t iovs_size = 0;
     uint64_t num_blocks = 0;
-    uint64_t offset_blocks;
-    char *bdev_name;
     int iovcnt = 0;
-    int rc;
     
+    SPDK_ERRLOG("Block 1\n");
     stripe_tree = ht_get(raid_ht, stripe_key);
-    current_request = RB_MIN(raid_addr_tree, &stripe_tree->tree);
-    current_request_bdev_io = spdk_bdev_io_from_ctx(current_request->bdev_io);
-    raid_bdev = current_request->bdev_io->raid_bdev;
+    min_request = RB_MIN(raid_addr_tree, &stripe_tree->tree);
+    min_request_bdev_io = spdk_bdev_io_from_ctx(min_request->bdev_io);
+    raid_bdev = min_request->bdev_io->raid_bdev;
     bdev = &raid_bdev->bdev;
-    bdev_name = raid_bdev->bdev.name;
 
-    offset_blocks = current_request_bdev_io->u.bdev.offset_blocks;
-
-    rc = spdk_bdev_open_ext(bdev_name, false, tmp_bdev_event_cb, NULL, &desc);
-
-    if (rc != 0)
-    {
-        SPDK_ERRLOG("Failed to open bdev with name: %s\n", bdev_name);
-        return rc;
-    }
-
-    ch = spdk_bdev_get_io_channel(desc);;
-    channel = (struct spdk_bdev_channel *)spdk_io_channel_get_ctx(ch);
-
-    bdev_io = (struct spdk_bdev_io *)bdev_channel_get_io(channel);
-    {
-        if (!bdev_io)
-            return -ENOMEM;
-    }
-
+    
+    SPDK_ERRLOG("Block 4\n");
     RB_FOREACH(current_request, raid_addr_tree, &stripe_tree->tree)
     {
         current_request_bdev_io = spdk_bdev_io_from_ctx(current_request->bdev_io);
@@ -97,42 +68,26 @@ raid_create_big_write_request(char *stripe_key, struct raid_bdev_io **big_raid_b
         iovs = realloc(iovs, iovs_size);
         for (int i = 0; i < current_request_bdev_io->u.bdev.iovcnt; i++)
         {
-            num_blocks += bdev_io->u.bdev.iovs[i].iov_len / bdev->blocklen;
+            num_blocks += current_request_bdev_io->u.bdev.iovs[i].iov_len / bdev->blocklen;
         }
         memcpy(iovs + iovcnt, current_request_bdev_io->u.bdev.iovs, sizeof(struct iovec) * current_request_bdev_io->u.bdev.iovcnt);
         iovcnt += current_request_bdev_io->u.bdev.iovcnt;
     }
 
-    bdev_io->internal.ch = channel;
-    bdev_io->internal.desc = desc;
-    bdev_io->type = SPDK_BDEV_IO_TYPE_WRITE;
-    bdev_io->u.bdev.iovs = iovs;
-    bdev_io->u.bdev.iovcnt = iovcnt;
-    bdev_io->u.bdev.md_buf = NULL;
-    bdev_io->u.bdev.num_blocks = num_blocks;
-    bdev_io->u.bdev.offset_blocks = offset_blocks;
-    bdev_io->u.bdev.memory_domain = NULL;
-    bdev_io->u.bdev.memory_domain_ctx = NULL;
-    bdev_io->u.bdev.accel_sequence = NULL;
-    bdev_io_init(bdev_io, bdev, spdk_bdev_io_complete, NULL);
-    bdev_io_submit(bdev_io);
+    SPDK_ERRLOG("Block 5\n");
+    min_request_bdev_io->u.bdev.iovs = iovs;
+    min_request_bdev_io->u.bdev.iovcnt = iovcnt;
 
-    raid_io = (struct raid_bdev_io *)bdev_io->driver_ctx;
+    SPDK_ERRLOG("Block 7\n");
 
-    raid_io->raid_bdev = bdev_io->bdev->ctxt;
-    raid_io->raid_ch = spdk_io_channel_get_ctx(ch);
-    raid_io->base_bdev_io_remaining = 0;
-    raid_io->base_bdev_io_submitted = 0;
-    raid_io->base_bdev_io_status = SPDK_BDEV_IO_STATUS_SUCCESS;
-
-    *big_raid_bdev_io = raid_io;
+    *big_raid_bdev_io = min_request->bdev_io;
 
     return 0;
 
 }
 
 int
-raid_request_catch(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_io)
+raid_request_catch(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_bdev_io)
 {
     struct raid_write_request *write_request;
     struct spdk_bdev_io *bdev_io;
@@ -170,16 +125,25 @@ raid_request_catch(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_
 
     if (stripe_tree->size == max_tree_size) {
 
-        rc = raid_create_big_write_request(stripe_key, big_raid_io);
+        SPDK_ERRLOG("entering raid_create_big_write_request\n");
+
+        rc = raid_create_big_write_request(stripe_key, big_raid_bdev_io);
+
+        SPDK_ERRLOG("quiting raid_create_big_write_request\n");
 
         if (rc != 0) return RAID_REQUEST_MERGE_STATUS_FAILED;
 
+        SPDK_ERRLOG("starting raid_bdev_io_complete\n");
+        struct raid_write_request *min_request = RB_MIN(raid_addr_tree, &stripe_tree->tree);
         struct raid_write_request *current_request;
         RB_FOREACH(current_request, raid_addr_tree, &stripe_tree->tree) {
-            raid_bdev_io_complete(current_request->bdev_io, SPDK_BDEV_IO_STATUS_SUCCESS);
+            if (min_request != current_request) raid_bdev_io_complete(current_request->bdev_io, SPDK_BDEV_IO_STATUS_SUCCESS);
         }
+        SPDK_ERRLOG("quiting raid_bdev_io_complete\n");
         clear_tree(stripe_tree); 
+        SPDK_ERRLOG("Ht remove the tree\n");
         ht_remove(raid_ht, stripe_key);
+        SPDK_ERRLOG("free(stripe_tree)\n");
         free(stripe_tree);
         return RAID_REQUEST_MERGE_STATUS_COMPLETE;
     }

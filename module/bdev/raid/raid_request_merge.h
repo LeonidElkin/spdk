@@ -30,6 +30,14 @@ struct raid_write_request {
     struct raid_bdev_io *bdev_io;
 };
 
+struct raid_bdev_merged_request {
+    struct raid_base_bdev_info	*base_info;
+    struct spdk_io_channel		*base_ch;
+    uint64_t pd_lba;
+	uint64_t pd_blocks;
+    struct spdk_bdev_ext_io_opts io_opts;
+};
+
 struct raid_request_tree {
     RB_HEAD(raid_addr_tree, raid_write_request) tree;
     uint64_t size;
