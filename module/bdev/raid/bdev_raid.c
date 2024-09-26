@@ -1011,6 +1011,7 @@ raid_bdev_create(const char *name, uint32_t strip_size, uint8_t num_base_bdevs,
 		return -ENOMEM;
 	}
 
+	raid_bdev->merge_request_poller = NULL;
 	raid_bdev->module = module;
 	raid_bdev->num_base_bdevs = num_base_bdevs;
 	raid_bdev->base_bdev_info = calloc(raid_bdev->num_base_bdevs,

@@ -3419,7 +3419,7 @@ bdev_io_submit(struct spdk_bdev_io *bdev_io)
 
 	if (!TAILQ_EMPTY(&ch->locked_ranges)) {
 		struct lba_range *range;
-
+		
 		TAILQ_FOREACH(range, &ch->locked_ranges, tailq) {
 			if (bdev_io_range_is_locked(bdev_io, range)) {
 				TAILQ_INSERT_TAIL(&ch->io_locked, bdev_io, internal.ch_link);

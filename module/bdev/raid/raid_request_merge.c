@@ -37,6 +37,20 @@ clear_tree(struct raid_request_tree *tree)
     tree->size = 0;
 }
 
+static uint64_t
+get_stripe_index(struct raid_bdev_io *raid_io) 
+{
+    struct spdk_bdev_io *bdev_io;
+    struct raid_bdev *raid_bdev;
+    uint64_t start_strip_idx;
+
+    bdev_io = spdk_bdev_io_from_ctx(raid_io);
+    raid_bdev = raid_io->raid_bdev;
+    start_strip_idx = bdev_io->u.bdev.offset_blocks >> raid_bdev->strip_size_shift;
+    
+    return start_strip_idx / (raid_bdev->num_base_bdevs - PARITY_STRIP);
+}
+
 static int
 raid_create_big_write_request(char *stripe_key, struct raid_bdev_io **big_raid_bdev_io)
 {
@@ -86,6 +100,44 @@ raid_create_big_write_request(char *stripe_key, struct raid_bdev_io **big_raid_b
 
 }
 
+static int
+raid_merge_request_complete(char *stripe_key, struct raid_bdev_io **big_raid_bdev_io)
+{
+    struct raid_request_tree *stripe_tree;
+    int rc;
+
+    stripe_tree = ht_get(raid_ht, stripe_key);
+    
+    rc = raid_create_big_write_request(stripe_key, big_raid_bdev_io);
+    if (rc != 0) return RAID_REQUEST_MERGE_STATUS_FAILED;
+
+    struct raid_write_request *min_request = RB_MIN(raid_addr_tree, &stripe_tree->tree);
+    struct raid_write_request *current_request;
+
+    RB_FOREACH(current_request, raid_addr_tree, &stripe_tree->tree) 
+    {
+        if (min_request != current_request) raid_bdev_io_complete(current_request->bdev_io, SPDK_BDEV_IO_STATUS_SUCCESS);
+    }
+    clear_tree(stripe_tree); 
+    ht_remove(raid_ht, stripe_key);
+    free(stripe_tree);
+    return RAID_REQUEST_MERGE_STATUS_COMPLETE;
+}
+
+void 
+get_status(int **raid_request_merge_status, struct raid_bdev_io *raid_io)
+{
+    struct raid_request_tree *stripe_tree;
+    char stripe_key[MAX_HT_STRING_LEN];
+    uint64_t stripe_index = get_stripe_index(raid_io);
+
+    snprintf(stripe_key, sizeof stripe_key, "%lu", stripe_index);
+
+    stripe_tree = ht_get(raid_ht, stripe_key);
+    *(raid_request_merge_status) = &(stripe_tree->raid_request_merge_status);
+}
+
+
 int
 raid_request_catch(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_bdev_io)
 {
@@ -95,25 +147,25 @@ raid_request_catch(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_
     struct raid_request_tree *stripe_tree;
     char stripe_key[MAX_HT_STRING_LEN];
     uint64_t stripe_index;
-    uint64_t start_strip_idx;
     uint8_t max_tree_size;
-    int rc;
+
+    bdev_io = spdk_bdev_io_from_ctx(raid_io);
+    raid_bdev = raid_io->raid_bdev;
+    stripe_index = get_stripe_index(raid_io);
+    max_tree_size = raid_bdev->num_base_bdevs - PARITY_STRIP;
 
     write_request = malloc(sizeof(struct raid_write_request));
     write_request->bdev_io = raid_io;
-    bdev_io = spdk_bdev_io_from_ctx(raid_io);
-    raid_bdev = raid_io->raid_bdev;
-    max_tree_size = raid_bdev->num_base_bdevs - PARITY_STRIP;
+    write_request->addr = bdev_io->u.bdev.offset_blocks * bdev_io->bdev->blocklen;
+
+    snprintf(stripe_key, sizeof stripe_key, "%lu", stripe_index);
 
     if (raid_ht == NULL) raid_ht = ht_create(); 
+    
+    stripe_tree = ht_get(raid_ht, stripe_key); 
 
-    start_strip_idx = bdev_io->u.bdev.offset_blocks >> raid_bdev->strip_size_shift;
-    write_request->addr = bdev_io->u.bdev.offset_blocks * bdev_io->bdev->blocklen;
-    stripe_index = start_strip_idx / (raid_bdev->num_base_bdevs - PARITY_STRIP);
-    snprintf(stripe_key, sizeof stripe_key, "%lu", stripe_index);
-    stripe_tree = ht_get(raid_ht, stripe_key);
-
-    if (stripe_tree == NULL) {
+    if (stripe_tree == NULL) 
+    {
         stripe_tree = malloc(sizeof(struct raid_request_tree));
         stripe_tree->size = 0;
         RB_INIT(&stripe_tree->tree);
@@ -122,31 +174,13 @@ raid_request_catch(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_
 
     RB_INSERT(raid_addr_tree, &stripe_tree->tree, write_request);
     stripe_tree->size++;
+    stripe_tree->last_request_time = spdk_get_ticks() / spdk_get_ticks_hz();
 
     if (stripe_tree->size == max_tree_size) {
-
-        SPDK_ERRLOG("entering raid_create_big_write_request\n");
-
-        rc = raid_create_big_write_request(stripe_key, big_raid_bdev_io);
-
-        SPDK_ERRLOG("quiting raid_create_big_write_request\n");
-
-        if (rc != 0) return RAID_REQUEST_MERGE_STATUS_FAILED;
-
-        SPDK_ERRLOG("starting raid_bdev_io_complete\n");
-        struct raid_write_request *min_request = RB_MIN(raid_addr_tree, &stripe_tree->tree);
-        struct raid_write_request *current_request;
-        RB_FOREACH(current_request, raid_addr_tree, &stripe_tree->tree) {
-            if (min_request != current_request) raid_bdev_io_complete(current_request->bdev_io, SPDK_BDEV_IO_STATUS_SUCCESS);
-        }
-        SPDK_ERRLOG("quiting raid_bdev_io_complete\n");
-        clear_tree(stripe_tree); 
-        SPDK_ERRLOG("Ht remove the tree\n");
-        ht_remove(raid_ht, stripe_key);
-        SPDK_ERRLOG("free(stripe_tree)\n");
-        free(stripe_tree);
-        return RAID_REQUEST_MERGE_STATUS_COMPLETE;
+        stripe_tree->raid_request_merge_status = raid_merge_request_complete(stripe_key, big_raid_bdev_io);
+        return stripe_tree->raid_request_merge_status;
     }
+    stripe_tree->raid_request_merge_status = RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS;
     return RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS;
 }
 
@@ -155,16 +189,9 @@ raid_merge_request_abort(struct raid_bdev_io *raid_io)
 {
     struct raid_write_request *current_request;
     struct raid_request_tree *stripe_tree;
-    struct spdk_bdev_io *bdev_io;
-    struct raid_bdev *raid_bdev;
     char stripe_key[MAX_HT_STRING_LEN];
-    uint64_t stripe_index;
-    uint64_t start_strip_idx;
+    uint64_t stripe_index = get_stripe_index(raid_io);
 
-    raid_bdev = raid_io->raid_bdev;
-    bdev_io = spdk_bdev_io_from_ctx(raid_io);
-    start_strip_idx = bdev_io->u.bdev.offset_blocks >> raid_bdev->strip_size_shift;
-    stripe_index = start_strip_idx / (raid_bdev->num_base_bdevs - PARITY_STRIP);
     snprintf(stripe_key, sizeof stripe_key, "%lu", stripe_index);
 
     stripe_tree = ht_get(raid_ht, stripe_key);
@@ -177,3 +204,29 @@ raid_merge_request_abort(struct raid_bdev_io *raid_io)
     ht_remove(raid_ht, stripe_key);
     free(stripe_tree);
 }
+
+int 
+raid_request_merge_immediately(void* args)
+{
+    SPDK_ERRLOG("RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS\n");
+    struct merged_raid_bdev_io* merged_bdev_io = args;
+    struct raid_request_tree *stripe_tree;
+    uint64_t current_time;
+    uint64_t stripe_index;
+    char stripe_key[MAX_HT_STRING_LEN];
+
+    current_time = spdk_get_ticks() / spdk_get_ticks_hz();
+    stripe_index = get_stripe_index(merged_bdev_io->raid_io);
+    snprintf(stripe_key, sizeof stripe_key, "%lu", stripe_index);
+    stripe_tree = ht_get(raid_ht, stripe_key); 
+    if (stripe_tree->raid_request_merge_status != RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS) return 0;
+    
+    if (stripe_tree->raid_request_merge_status == RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS && 
+            current_time - stripe_tree->last_request_time > WAIT_FOR_REQUEST_TIME) 
+    {
+        stripe_tree->raid_request_merge_status = RAID_REQUEST_MERGE_STATUS_COMPLETING;
+        stripe_tree->raid_request_merge_status = raid_merge_request_complete(stripe_key, &(merged_bdev_io->big_raid_io));
+    }
+    return 0;
+}
+

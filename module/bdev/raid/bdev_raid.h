@@ -144,6 +144,9 @@ struct raid_bdev {
 	/* Raid Level of this raid bdev */
 	enum raid_level			level;
 
+	/* Poller responsible for merging requests */
+	struct spdk_poller *merge_request_poller;
+
 	/* Set to true if destroy of this raid bdev is started. */
 	bool				destroy_started;
 
