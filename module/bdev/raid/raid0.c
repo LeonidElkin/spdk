@@ -102,6 +102,29 @@ raid0_get_info_for_merged_request(struct raid_bdev_io *raid_io) {
 	return merged_request;
 }
 
+static int 
+raid0_request_merge_immediately(void* args) {
+	struct raid_bdev_io *raid_io = args;
+	struct raid_bdev_io *big_raid_io;
+	int rc;
+	rc = raid_poller_merge_helper(raid_io, &big_raid_io);
+	switch (rc)
+	{
+		case RAID_REQUEST_MERGE_STATUS_COMPLETE:
+			raid0_submit_rw_request(big_raid_io);
+			break;
+		case RAID_REQUEST_MERGE_STATUS_FAILED:
+			SPDK_ERRLOG("Failed to merge requests!\n");
+			assert(false);
+			break;
+		case RAID_REQUEST_MERGE_STATUS_COMPLETING:
+			return 0;
+		default:
+			assert(false);
+	}
+	return 0;
+}
+
 /*
  * brief:
  * raid0_submit_rw_request function is used to submit I/O to the correct
@@ -128,7 +151,7 @@ raid0_submit_rw_request(struct raid_bdev_io *raid_io)
 	uint64_t			end_strip;
 	struct raid_base_bdev_info	*base_info;
 	struct spdk_io_channel		*base_ch;
-	int *merged_request_status;
+	int merged_request_status;
 
 	start_strip = bdev_io->u.bdev.offset_blocks >> raid_bdev->strip_size_shift;
 	end_strip = (bdev_io->u.bdev.offset_blocks + bdev_io->u.bdev.num_blocks - 1) >>
@@ -171,27 +194,17 @@ raid0_submit_rw_request(struct raid_bdev_io *raid_io)
 						 pd_lba, pd_blocks, raid0_bdev_io_completion,
 						 raid_io, &io_opts);
 	} else if (bdev_io->type == SPDK_BDEV_IO_TYPE_WRITE) {
-
-		struct raid_bdev_io* big_raid_io;
-		raid_request_catch(raid_io, &big_raid_io);
-		get_status(&merged_request_status, raid_io);
-
-		struct merged_raid_bdev_io merged_raid_bdev_io = {big_raid_io, raid_io};
-		if (raid_bdev->merge_request_poller == NULL) 
-		{
-			raid_bdev->merge_request_poller = SPDK_POLLER_REGISTER(raid_request_merge_immediately, &merged_raid_bdev_io, 500);
-		}
-		bool spinning = true;
-		while (spinning)
-		{
-			switch (*merged_request_status) {
+		bool ready_to_merge = raid_get_stripe_tree_ready(raid_io);
+		if (!ready_to_merge) {
+			struct raid_bdev_io* big_raid_io;
+			merged_request_status = raid_request_catch(raid_io, &big_raid_io);
+			if (raid_bdev->merge_request_poller == NULL && merged_request_status != RAID_REQUEST_MERGE_STATUS_COMPLETE)
+			{
+				raid_bdev->merge_request_poller = SPDK_POLLER_REGISTER(raid0_request_merge_immediately, raid_io, 500);
+			}
+			switch (merged_request_status) {
 				case RAID_REQUEST_MERGE_STATUS_COMPLETE:
-					//This branch must be executed only by one raid_bdev_io
-					if (*merged_request_status == RAID_REQUEST_MERGE_STATUS_COMPLETE) {
-						*merged_request_status = RAID_REQUEST_MERGE_STATUS_SKIP_FOR_ALL;
-					} else {
-						break;
-					}
+					spdk_poller_unregister(&(raid_bdev->merge_request_poller));
 					struct raid_bdev_merged_request_info merged_request_info;
 					struct spdk_bdev_io	*big_bdev_io;
 
@@ -202,21 +215,23 @@ raid0_submit_rw_request(struct raid_bdev_io *raid_io)
 								big_bdev_io->u.bdev.iovs, big_bdev_io->u.bdev.iovcnt,
 								merged_request_info.pd_lba,  merged_request_info.pd_blocks, raid0_bdev_io_completion,
 								big_raid_io, &(merged_request_info.io_opts));
-					raid0_submit_rw_request(big_raid_io);
 					break;
 				case RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS:
-					break;
+					SPDK_ERRLOG("RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS\n");
+					return;
 				case RAID_REQUEST_MERGE_STATUS_FAILED:
 					SPDK_ERRLOG("RAID_REQUEST_MERGE_STATUS_FAILED\n");
 					SPDK_ERRLOG("Failed to merge requests!\n");
 					assert(false);
-				case RAID_REQUEST_MERGE_STATUS_SKIP_FOR_ALL:
-					spinning = false;
-					spdk_poller_unregister(&(raid_bdev->merge_request_poller));
-					return;
 			}
-		}
-		
+		} else {
+			spdk_poller_unregister(&(raid_bdev->merge_request_poller));
+			raid_free_merging_status(raid_io);
+			ret = spdk_bdev_writev_blocks_ext(base_info->desc, base_ch,
+						  bdev_io->u.bdev.iovs, bdev_io->u.bdev.iovcnt,
+						  pd_lba, pd_blocks, raid0_bdev_io_completion,
+						  raid_io, &io_opts);
+		}	
 	} else {
 		SPDK_ERRLOG("Recvd not supported io type %u\n", bdev_io->type);
 		assert(0);

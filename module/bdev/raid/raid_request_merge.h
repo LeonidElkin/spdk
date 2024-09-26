@@ -23,8 +23,7 @@ enum raid_request_merge_status {
     RAID_REQUEST_MERGE_STATUS_COMPLETE = 0,
     RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS = 1,
     RAID_REQUEST_MERGE_STATUS_FAILED = -1,
-    RAID_REQUEST_MERGE_STATUS_SKIP_FOR_ALL = -2,
-    RAID_REQUEST_MERGE_STATUS_COMPLETING = -3,
+    RAID_REQUEST_MERGE_STATUS_COMPLETING = -2,
 };
 
 struct raid_write_request {
@@ -45,17 +44,13 @@ struct raid_request_tree {
     RB_HEAD(raid_addr_tree, raid_write_request) tree;
     uint64_t size;
     uint64_t last_request_time;
-    int raid_request_merge_status;
 };
 
-struct merged_raid_bdev_io {
-    struct raid_bdev_io *big_raid_io;
-    struct raid_bdev_io *raid_io;
-};
 
 int raid_request_catch(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_io);
 void raid_merge_request_abort(struct raid_bdev_io *raid_io);
-int raid_request_merge_immediately(void *args);
-void get_status(int **raid_request_merge_status, struct raid_bdev_io *raid_io);
+int raid_poller_merge_helper(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_io);
+bool raid_get_stripe_tree_ready(struct raid_bdev_io *raid_io); 
+void  raid_free_merging_status(struct raid_bdev_io *raid_io);
 
 #endif /* SPDK_BDEV_RAID_MERGE_REQUESTS_INTERNAL_H*/

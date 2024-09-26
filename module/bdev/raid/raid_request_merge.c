@@ -23,7 +23,8 @@ addr_cmp(struct raid_write_request *c1, struct raid_write_request *c2)
 
 RB_GENERATE_STATIC(raid_addr_tree, raid_write_request, link, addr_cmp);
 
-ht *raid_ht = NULL;
+static ht *raid_ht = NULL;
+static ht *raid_status_ht = NULL;
 
 static void
 clear_tree(struct raid_request_tree *tree)
@@ -66,15 +67,13 @@ raid_create_big_write_request(char *stripe_key, struct raid_bdev_io **big_raid_b
     uint64_t num_blocks = 0;
     int iovcnt = 0;
     
-    SPDK_ERRLOG("Block 1\n");
     stripe_tree = ht_get(raid_ht, stripe_key);
     min_request = RB_MIN(raid_addr_tree, &stripe_tree->tree);
     min_request_bdev_io = spdk_bdev_io_from_ctx(min_request->bdev_io);
     raid_bdev = min_request->bdev_io->raid_bdev;
     bdev = &raid_bdev->bdev;
 
-    
-    SPDK_ERRLOG("Block 4\n");
+
     RB_FOREACH(current_request, raid_addr_tree, &stripe_tree->tree)
     {
         current_request_bdev_io = spdk_bdev_io_from_ctx(current_request->bdev_io);
@@ -88,11 +87,9 @@ raid_create_big_write_request(char *stripe_key, struct raid_bdev_io **big_raid_b
         iovcnt += current_request_bdev_io->u.bdev.iovcnt;
     }
 
-    SPDK_ERRLOG("Block 5\n");
     min_request_bdev_io->u.bdev.iovs = iovs;
     min_request_bdev_io->u.bdev.iovcnt = iovcnt;
 
-    SPDK_ERRLOG("Block 7\n");
 
     *big_raid_bdev_io = min_request->bdev_io;
 
@@ -103,6 +100,7 @@ raid_create_big_write_request(char *stripe_key, struct raid_bdev_io **big_raid_b
 static int
 raid_merge_request_complete(char *stripe_key, struct raid_bdev_io **big_raid_bdev_io)
 {
+    SPDK_ERRLOG("raid_merge_request_complete\n");
     struct raid_request_tree *stripe_tree;
     int rc;
 
@@ -124,19 +122,29 @@ raid_merge_request_complete(char *stripe_key, struct raid_bdev_io **big_raid_bde
     return RAID_REQUEST_MERGE_STATUS_COMPLETE;
 }
 
-void 
-get_status(int **raid_request_merge_status, struct raid_bdev_io *raid_io)
+bool
+raid_get_stripe_tree_ready(struct raid_bdev_io *raid_io) 
 {
-    struct raid_request_tree *stripe_tree;
+    bool* ready_to_merge;
     char stripe_key[MAX_HT_STRING_LEN];
-    uint64_t stripe_index = get_stripe_index(raid_io);
+    uint64_t stripe_index;
 
+    stripe_index = get_stripe_index(raid_io);
     snprintf(stripe_key, sizeof stripe_key, "%lu", stripe_index);
 
-    stripe_tree = ht_get(raid_ht, stripe_key);
-    *(raid_request_merge_status) = &(stripe_tree->raid_request_merge_status);
-}
+    if (raid_status_ht == NULL) raid_status_ht = ht_create(); 
 
+    ready_to_merge = ht_get(raid_status_ht, stripe_key);
+    
+    if (ready_to_merge == NULL) 
+    {
+        ready_to_merge = malloc(sizeof(bool));
+        *ready_to_merge = false;
+        ht_set(raid_status_ht, stripe_key, ready_to_merge);
+    }
+
+    return *ready_to_merge;
+}
 
 int
 raid_request_catch(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_bdev_io)
@@ -177,10 +185,8 @@ raid_request_catch(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_
     stripe_tree->last_request_time = spdk_get_ticks() / spdk_get_ticks_hz();
 
     if (stripe_tree->size == max_tree_size) {
-        stripe_tree->raid_request_merge_status = raid_merge_request_complete(stripe_key, big_raid_bdev_io);
-        return stripe_tree->raid_request_merge_status;
+        return raid_merge_request_complete(stripe_key, big_raid_bdev_io);
     }
-    stripe_tree->raid_request_merge_status = RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS;
     return RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS;
 }
 
@@ -191,10 +197,13 @@ raid_merge_request_abort(struct raid_bdev_io *raid_io)
     struct raid_request_tree *stripe_tree;
     char stripe_key[MAX_HT_STRING_LEN];
     uint64_t stripe_index = get_stripe_index(raid_io);
+    bool* ready_to_merge;
 
     snprintf(stripe_key, sizeof stripe_key, "%lu", stripe_index);
 
     stripe_tree = ht_get(raid_ht, stripe_key);
+    ready_to_merge = ht_get(raid_status_ht, stripe_key);
+
 
     RB_FOREACH(current_request, raid_addr_tree, &stripe_tree->tree)
     {
@@ -202,31 +211,46 @@ raid_merge_request_abort(struct raid_bdev_io *raid_io)
     }
     clear_tree(stripe_tree);
     ht_remove(raid_ht, stripe_key);
+    ht_remove(raid_status_ht, stripe_key);
+    free(ready_to_merge);
     free(stripe_tree);
 }
 
 int 
-raid_request_merge_immediately(void* args)
+raid_poller_merge_helper(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_io)
 {
-    SPDK_ERRLOG("RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS\n");
-    struct merged_raid_bdev_io* merged_bdev_io = args;
     struct raid_request_tree *stripe_tree;
+    bool *ready_to_merge;
     uint64_t current_time;
     uint64_t stripe_index;
     char stripe_key[MAX_HT_STRING_LEN];
 
     current_time = spdk_get_ticks() / spdk_get_ticks_hz();
-    stripe_index = get_stripe_index(merged_bdev_io->raid_io);
+    stripe_index = get_stripe_index(raid_io);
     snprintf(stripe_key, sizeof stripe_key, "%lu", stripe_index);
     stripe_tree = ht_get(raid_ht, stripe_key); 
-    if (stripe_tree->raid_request_merge_status != RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS) return 0;
     
-    if (stripe_tree->raid_request_merge_status == RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS && 
-            current_time - stripe_tree->last_request_time > WAIT_FOR_REQUEST_TIME) 
+    if (current_time - stripe_tree->last_request_time > WAIT_FOR_REQUEST_TIME) 
     {
-        stripe_tree->raid_request_merge_status = RAID_REQUEST_MERGE_STATUS_COMPLETING;
-        stripe_tree->raid_request_merge_status = raid_merge_request_complete(stripe_key, &(merged_bdev_io->big_raid_io));
+        SPDK_ERRLOG("FROM_POLLER\n");
+        ready_to_merge = ht_get(raid_status_ht, stripe_key);
+        *ready_to_merge = true;
+        return raid_merge_request_complete(stripe_key, big_raid_io);
     }
-    return 0;
+    return RAID_REQUEST_MERGE_STATUS_COMPLETING;
 }
 
+void 
+raid_free_merging_status(struct raid_bdev_io *raid_io) {
+    bool* ready_to_merge;
+    char stripe_key[MAX_HT_STRING_LEN];
+    uint64_t stripe_index;
+
+    stripe_index = get_stripe_index(raid_io);
+    snprintf(stripe_key, sizeof stripe_key, "%lu", stripe_index);
+    
+    ready_to_merge = ht_get(raid_status_ht, stripe_key);
+
+    ht_remove(raid_status_ht, stripe_key);
+    free(ready_to_merge);
+}
