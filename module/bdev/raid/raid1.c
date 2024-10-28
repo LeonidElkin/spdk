@@ -7,6 +7,8 @@
 
 #include "spdk/likely.h"
 #include "spdk/log.h"
+#include "raid_request_merge.h"
+#include "ht.h"
 
 struct raid1_info {
 	/* The parent raid bdev */
@@ -175,12 +177,28 @@ raid1_submit_rw_request(struct raid_bdev_io *raid_io)
 	}
 }
 
+static void
+raid1_submit_rw_request_with_merge(struct raid_bdev_io *raid_io)
+{
+	struct spdk_bdev_io *bdev_io = spdk_bdev_io_from_ctx(raid_io);
+	if (bdev_io->type != SPDK_BDEV_IO_TYPE_WRITE) raid1_submit_rw_request(raid_io);
+	else raid_add_request_to_ht(raid_io);
+}
+
 static int
 raid1_start(struct raid_bdev *raid_bdev)
 {
 	uint64_t min_blockcnt = UINT64_MAX;
 	struct raid_base_bdev_info *base_info;
 	struct raid1_info *r1info;
+
+	SPDK_ERRLOG("strip_size - %u\n", raid_bdev->strip_size);
+	SPDK_ERRLOG("strip_size_kb - %u\n", raid_bdev->strip_size_kb);
+	SPDK_ERRLOG("strip_size_shift - %u\n", raid_bdev->strip_size_shift);
+	SPDK_ERRLOG("blocklen_shift - %u\n", raid_bdev->blocklen_shift);
+	SPDK_ERRLOG("num_base_bdevs - %u\n", raid_bdev->num_base_bdevs);
+	SPDK_ERRLOG("num_base_bdevs_discovered - %u\n", raid_bdev->num_base_bdevs_discovered);
+	SPDK_ERRLOG("min_base_bdevs_operational - %u\n", raid_bdev->min_base_bdevs_operational);
 
 	r1info = calloc(1, sizeof(*r1info));
 	if (!r1info) {
@@ -216,7 +234,8 @@ static struct raid_bdev_module g_raid1_module = {
 	.memory_domains_supported = true,
 	.start = raid1_start,
 	.stop = raid1_stop,
-	.submit_rw_request = raid1_submit_rw_request,
+	.submit_rw_request = raid1_submit_rw_request_with_merge,
+	.poller_request = raid1_submit_rw_request,
 };
 RAID_MODULE_REGISTER(&g_raid1_module)
 

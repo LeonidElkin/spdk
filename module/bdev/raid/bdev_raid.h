@@ -9,6 +9,8 @@
 #include "spdk/bdev_module.h"
 #include "spdk/uuid.h"
 
+#include "ht.h"
+
 enum raid_level {
 	INVALID_RAID_LEVEL	= -1,
 	RAID0			= 0,
@@ -147,6 +149,12 @@ struct raid_bdev {
 	/* Poller responsible for merging requests */
 	struct spdk_poller *merge_request_poller;
 
+	/* Hashtable responsible for merging requests */
+	ht* merge_ht;
+	
+	/* number of parity strips */
+	uint8_t parity_strip_cnt;
+
 	/* Set to true if destroy of this raid bdev is started. */
 	bool				destroy_started;
 
@@ -243,6 +251,9 @@ struct raid_bdev_module {
 	/* Handler for R/W requests */
 	void (*submit_rw_request)(struct raid_bdev_io *raid_io);
 
+	/* Handler for write merged requests */
+	void (*poller_request)(struct raid_bdev_io *raid_io);
+	
 	/* Handler for requests without payload (flush, unmap). Optional. */
 	void (*submit_null_payload_request)(struct raid_bdev_io *raid_io);
 

@@ -12,6 +12,8 @@
 #include "spdk/util.h"
 #include "spdk/json.h"
 
+#include "raid_request_merge.h"
+
 static bool g_shutdown_started = false;
 
 /* List of all raid bdevs */
@@ -185,6 +187,8 @@ raid_bdev_cleanup(struct raid_bdev *raid_bdev)
 
 	TAILQ_REMOVE(&g_raid_bdev_list, raid_bdev, global_link);
 	free(raid_bdev->base_bdev_info);
+	spdk_poller_unregister(&(raid_bdev->merge_request_poller));
+	raid_clear_ht(raid_bdev);
 }
 
 static void
@@ -1012,6 +1016,23 @@ raid_bdev_create(const char *name, uint32_t strip_size, uint8_t num_base_bdevs,
 	}
 
 	raid_bdev->merge_request_poller = NULL;
+	
+	switch(level) {
+		case RAID1:
+			raid_bdev->merge_request_poller = SPDK_POLLER_REGISTER(raid_request_merge_poller, raid_bdev, POLLER_MERGE_PERIOD_MILLISECONDS);
+			raid_bdev->merge_ht = ht_create();
+			raid_bdev->parity_strip_cnt = 1;
+			break;
+		case RAID0:
+			raid_bdev->merge_request_poller = SPDK_POLLER_REGISTER(raid_request_merge_poller, raid_bdev, POLLER_MERGE_PERIOD_MILLISECONDS);
+			raid_bdev->merge_ht = ht_create();
+			raid_bdev->parity_strip_cnt = 0;
+			break;
+		default:
+			raid_bdev->merge_request_poller = NULL;
+			raid_bdev->merge_ht = NULL;
+			raid_bdev->parity_strip_cnt = 0;
+	}
 	raid_bdev->module = module;
 	raid_bdev->num_base_bdevs = num_base_bdevs;
 	raid_bdev->base_bdev_info = calloc(raid_bdev->num_base_bdevs,

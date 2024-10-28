@@ -16,8 +16,8 @@
 #include "ht.h"
 
 #define MAX_HT_STRING_LEN 35
-#define PARITY_STRIP 0
 #define WAIT_FOR_REQUEST_TIME 2
+#define POLLER_MERGE_PERIOD_MILLISECONDS 500
 
 enum raid_request_merge_status {
     RAID_REQUEST_MERGE_STATUS_COMPLETE = 0,
@@ -32,14 +32,6 @@ struct raid_write_request {
     struct raid_bdev_io *bdev_io;
 };
 
-struct raid_bdev_merged_request_info {
-    struct raid_base_bdev_info	*base_info;
-    struct spdk_io_channel		*base_ch;
-    uint64_t pd_lba;
-	uint64_t pd_blocks;
-    struct spdk_bdev_ext_io_opts io_opts;
-};
-
 struct raid_request_tree {
     RB_HEAD(raid_addr_tree, raid_write_request) tree;
     uint64_t size;
@@ -47,10 +39,8 @@ struct raid_request_tree {
 };
 
 
-int raid_request_catch(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_io);
-void raid_merge_request_abort(struct raid_bdev_io *raid_io);
-int raid_poller_merge_helper(struct raid_bdev_io *raid_io, struct raid_bdev_io **big_raid_io);
-bool raid_get_stripe_tree_ready(struct raid_bdev_io *raid_io); 
-void  raid_free_merging_status(struct raid_bdev_io *raid_io);
+void raid_clear_ht(struct raid_bdev *raid_bdev);
+int raid_add_request_to_ht(struct raid_bdev_io *raid_io);
+int raid_request_merge_poller(void *args);
 
 #endif /* SPDK_BDEV_RAID_MERGE_REQUESTS_INTERNAL_H*/
