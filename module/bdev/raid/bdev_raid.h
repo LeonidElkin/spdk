@@ -146,14 +146,8 @@ struct raid_bdev {
 	/* Raid Level of this raid bdev */
 	enum raid_level			level;
 
-	/* Poller responsible for merging requests */
-	struct spdk_poller *merge_request_poller;
-
-	/* Hashtable responsible for merging requests */
-	ht* merge_ht;
-	
-	/* number of parity strips */
-	uint8_t parity_strip_cnt;
+	/* Info required for merging requests */
+	struct raid_bdev_merge_info *merge_info;
 
 	/* Set to true if destroy of this raid bdev is started. */
 	bool				destroy_started;
@@ -253,7 +247,10 @@ struct raid_bdev_module {
 
 	/* Handler for write merged requests */
 	void (*poller_request)(struct raid_bdev_io *raid_io);
-	
+
+	/* Handler for write merged requests */
+	void (*completion)(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg);
+
 	/* Handler for requests without payload (flush, unmap). Optional. */
 	void (*submit_null_payload_request)(struct raid_bdev_io *raid_io);
 

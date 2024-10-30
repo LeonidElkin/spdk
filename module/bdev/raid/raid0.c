@@ -117,14 +117,6 @@ raid0_submit_rw_request(struct raid_bdev_io *raid_io)
 						 pd_lba, pd_blocks, raid0_bdev_io_completion,
 						 raid_io, &io_opts);
 	} else if (bdev_io->type == SPDK_BDEV_IO_TYPE_WRITE) {
-
-		// SPDK_ERRLOG("IO num_blocks - %lu\n", bdev_io->u.bdev.num_blocks);
-		// SPDK_ERRLOG("IO offset_blocks - %lu\n", bdev_io->u.bdev.offset_blocks);
-		// SPDK_ERRLOG("IO split_remaining_num_blocks - %lu\n", bdev_io->u.bdev.split_remaining_num_blocks);
-		// SPDK_ERRLOG("IO split_current_offset_blocks - %lu\n", bdev_io->u.bdev.split_current_offset_blocks);
-		// SPDK_ERRLOG("IO split_outstanding - %u\n", bdev_io->u.bdev.split_outstanding);
-		// SPDK_ERRLOG("IO iovcnt - %i\n", bdev_io->u.bdev.iovcnt);
-		// SPDK_ERRLOG("IO iovlen - %lu\n", bdev_io->u.bdev.iovs[0].iov_len);
 		
 		ret = spdk_bdev_writev_blocks_ext(base_info->desc, base_ch,
 						  bdev_io->u.bdev.iovs, bdev_io->u.bdev.iovcnt,
@@ -381,14 +373,6 @@ raid0_start(struct raid_bdev *raid_bdev)
 {
 	raid_bdev->bdev.blockcnt = raid0_calculate_blockcnt(raid_bdev);
 
-	// SPDK_ERRLOG("strip_size - %u\n", raid_bdev->strip_size);
-	// SPDK_ERRLOG("strip_size_kb - %u\n", raid_bdev->strip_size_kb);
-	// SPDK_ERRLOG("strip_size_shift - %u\n", raid_bdev->strip_size_shift);
-	// SPDK_ERRLOG("blocklen_shift - %u\n", raid_bdev->blocklen_shift);
-	// SPDK_ERRLOG("num_base_bdevs - %u\n", raid_bdev->num_base_bdevs);
-	// SPDK_ERRLOG("num_base_bdevs_discovered - %u\n", raid_bdev->num_base_bdevs_discovered);
-	// SPDK_ERRLOG("min_base_bdevs_operational - %u\n", raid_bdev->min_base_bdevs_operational);
-
 	if (raid_bdev->num_base_bdevs > 1) {
 		raid_bdev->bdev.optimal_io_boundary = raid_bdev->strip_size;
 		raid_bdev->bdev.split_on_optimal_io_boundary = true;
@@ -433,6 +417,7 @@ static struct raid_bdev_module g_raid0_module = {
 	.submit_null_payload_request = raid0_submit_null_payload_request,
 	.resize = raid0_resize,
 	.poller_request = raid0_submit_rw_request,
+	.completion = raid0_bdev_io_completion,
 };
 RAID_MODULE_REGISTER(&g_raid0_module)
 

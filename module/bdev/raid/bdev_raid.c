@@ -161,6 +161,13 @@ raid_bdev_destroy_cb(void *io_device, void *ctx_buf)
 	raid_ch->base_channel = NULL;
 }
 
+static void
+raid_free_merge_info(struct raid_bdev *raid_bdev)
+{
+	raid_clear_ht(raid_bdev);
+	free(raid_bdev->merge_info);
+}
+
 /*
  * brief:
  * raid_bdev_cleanup is used to cleanup raid_bdev related data
@@ -187,8 +194,7 @@ raid_bdev_cleanup(struct raid_bdev *raid_bdev)
 
 	TAILQ_REMOVE(&g_raid_bdev_list, raid_bdev, global_link);
 	free(raid_bdev->base_bdev_info);
-	spdk_poller_unregister(&(raid_bdev->merge_request_poller));
-	raid_clear_ht(raid_bdev);
+	raid_free_merge_info(raid_bdev);
 }
 
 static void
@@ -929,6 +935,25 @@ raid_bdev_init(void)
 	return 0;
 }
 
+static int
+raid_merge_info_alloc(uint8_t num_parity_strip, uint8_t num_base_bdevs, struct raid_bdev_merge_info **info)
+{
+	struct raid_bdev_merge_info *_info = calloc(1, sizeof(struct raid_bdev_merge_info));
+
+	if (!_info) {
+		SPDK_ERRLOG("Unable to allocate memory for merge info\n");
+		return -ENOMEM;
+	}
+
+	_info->merge_ht = ht_create();
+	_info->num_parity_strip = num_parity_strip;
+	_info->max_tree_size = num_base_bdevs - num_parity_strip;
+
+	*info = _info;
+
+	return 0;
+}
+
 /*
  * brief:
  * raid_bdev_create allocates raid bdev based on passed configuration
@@ -1015,24 +1040,21 @@ raid_bdev_create(const char *name, uint32_t strip_size, uint8_t num_base_bdevs,
 		return -ENOMEM;
 	}
 
-	raid_bdev->merge_request_poller = NULL;
-	
+	int ret;
+
 	switch(level) {
 		case RAID1:
-			raid_bdev->merge_request_poller = SPDK_POLLER_REGISTER(raid_request_merge_poller, raid_bdev, POLLER_MERGE_PERIOD_MILLISECONDS);
-			raid_bdev->merge_ht = ht_create();
-			raid_bdev->parity_strip_cnt = 1;
+			ret = raid_merge_info_alloc(1, num_base_bdevs, &(raid_bdev->merge_info));
 			break;
 		case RAID0:
-			raid_bdev->merge_request_poller = SPDK_POLLER_REGISTER(raid_request_merge_poller, raid_bdev, POLLER_MERGE_PERIOD_MILLISECONDS);
-			raid_bdev->merge_ht = ht_create();
-			raid_bdev->parity_strip_cnt = 0;
+			ret = raid_merge_info_alloc(0, num_base_bdevs, &(raid_bdev->merge_info));
 			break;
 		default:
-			raid_bdev->merge_request_poller = NULL;
-			raid_bdev->merge_ht = NULL;
-			raid_bdev->parity_strip_cnt = 0;
+			raid_bdev->merge_info = NULL;
 	}
+
+	if (ret) return ret;
+
 	raid_bdev->module = module;
 	raid_bdev->num_base_bdevs = num_base_bdevs;
 	raid_bdev->base_bdev_info = calloc(raid_bdev->num_base_bdevs,

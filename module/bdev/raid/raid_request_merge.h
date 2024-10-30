@@ -19,28 +19,35 @@
 #define WAIT_FOR_REQUEST_TIME 2
 #define POLLER_MERGE_PERIOD_MILLISECONDS 500
 
-enum raid_request_merge_status {
-    RAID_REQUEST_MERGE_STATUS_COMPLETE = 0,
-    RAID_REQUEST_MERGE_STATUS_WAITING_FOR_REQUESTS = 1,
-    RAID_REQUEST_MERGE_STATUS_FAILED = -1,
-    RAID_REQUEST_MERGE_STATUS_COMPLETING = -2,
+struct raid_bdev_merge_info {
+	/* Hashtable responsible for merging requests */
+	ht *merge_ht;
+
+	/* number of parity strips */
+	uint8_t num_parity_strip;
+
+	/* stripe size for this bdev */
+	uint8_t max_tree_size;
 };
 
 struct raid_write_request {
-    uint32_t addr;
-    RB_ENTRY(raid_write_request) link;
-    struct raid_bdev_io *bdev_io;
+	uint32_t addr;
+	RB_ENTRY(raid_write_request) link;
+	struct raid_bdev_io *raid_io;
 };
 
 struct raid_request_tree {
-    RB_HEAD(raid_addr_tree, raid_write_request) tree;
-    uint64_t size;
-    uint64_t last_request_time;
+	RB_HEAD(raid_addr_tree, raid_write_request) tree;
+	uint64_t size;
+	uint64_t last_request_time;
+	struct spdk_poller *merge_request_poller;
+	struct raid_bdev *raid_bdev;
 };
 
 
 void raid_clear_ht(struct raid_bdev *raid_bdev);
 int raid_add_request_to_ht(struct raid_bdev_io *raid_io);
 int raid_request_merge_poller(void *args);
+
 
 #endif /* SPDK_BDEV_RAID_MERGE_REQUESTS_INTERNAL_H*/

@@ -13,22 +13,22 @@
 #define FNV_PRIME 1099511628211UL
 
 typedef struct {
-    const char *key;
-    void *value;
+	const char *key;
+	void *value;
 } ht_entry;
 
 typedef struct {
-    ht_entry *entries;
-    size_t capacity;
-    size_t length;
+	ht_entry *entries;
+	size_t capacity;
+	size_t length;
 } ht;
 
 typedef struct {
-    const char *key;
-    void *value;
+	const char *key;
+	void *value;
 
-    ht *_table;
-    size_t _index;
+	ht *_table;
+	size_t _index;
 } hti;
 
 ht * ht_create(void);
