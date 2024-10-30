@@ -117,7 +117,7 @@ raid0_submit_rw_request(struct raid_bdev_io *raid_io)
 						 pd_lba, pd_blocks, raid0_bdev_io_completion,
 						 raid_io, &io_opts);
 	} else if (bdev_io->type == SPDK_BDEV_IO_TYPE_WRITE) {
-		
+
 		ret = spdk_bdev_writev_blocks_ext(base_info->desc, base_ch,
 						  bdev_io->u.bdev.iovs, bdev_io->u.bdev.iovcnt,
 						  pd_lba, pd_blocks, raid0_bdev_io_completion,
@@ -141,8 +141,8 @@ static void
 raid0_submit_rw_request_with_merge(struct raid_bdev_io *raid_io)
 {
 	struct spdk_bdev_io *bdev_io = spdk_bdev_io_from_ctx(raid_io);
-	if (bdev_io->type != SPDK_BDEV_IO_TYPE_WRITE) raid0_submit_rw_request(raid_io);
-	else raid_add_request_to_ht(raid_io);
+	if (bdev_io->type != SPDK_BDEV_IO_TYPE_WRITE) { raid0_submit_rw_request(raid_io); }
+	else { raid_add_request_to_ht(raid_io); }
 }
 
 /* raid0 IO range */

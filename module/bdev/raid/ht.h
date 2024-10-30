@@ -31,11 +31,11 @@ typedef struct {
 	size_t _index;
 } hti;
 
-ht * ht_create(void);
+ht *ht_create(void);
 void ht_destroy(ht *table);
-void * ht_get(ht *table, const char *key);
-const char * ht_set(ht *table, const char *key, void *value);
-void * ht_remove(ht *table, const char *key);
+void *ht_get(ht *table, const char *key);
+const char *ht_set(ht *table, const char *key, void *value);
+void *ht_remove(ht *table, const char *key);
 size_t ht_length(ht *table);
 hti ht_iterator(ht *table);
 bool ht_next(hti *it);

@@ -30,7 +30,7 @@ struct raid5_stripe_request {
 
 	struct iovec **strip_buffs;
 
-	int* strip_buffs_cnts;
+	int *strip_buffs_cnts;
 
 	int strip_buffs_cnt;
 
@@ -87,7 +87,7 @@ raid5_fill_iovs_with_zeroes(struct iovec *iovs, int iovcnt)
 
 static void
 raid5_queue_io_wait(struct raid_bdev_io *raid_io, struct spdk_bdev *bdev,
-		struct spdk_io_channel *ch, spdk_bdev_io_wait_cb cb_fn, void *cb_arg)
+		    struct spdk_io_channel *ch, spdk_bdev_io_wait_cb cb_fn, void *cb_arg)
 {
 	raid_io->waitq_entry.bdev = bdev;
 	raid_io->waitq_entry.cb_fn = cb_fn;
@@ -102,11 +102,11 @@ raid5_check_io_boundaries(struct raid_bdev_io *raid_io)
 	struct raid_bdev			*raid_bdev = raid_io->raid_bdev;
 	uint64_t start_strip_idx = bdev_io->u.bdev.offset_blocks >> raid_bdev->strip_size_shift;
 	uint64_t end_strip_idx = (bdev_io->u.bdev.offset_blocks + bdev_io->u.bdev.num_blocks - 1) >>
-							raid_bdev->strip_size_shift;
-	
+				 raid_bdev->strip_size_shift;
+
 	return (start_strip_idx <= end_strip_idx) &&
-			(start_strip_idx / (raid_bdev->num_base_bdevs - 1) ==
-			end_strip_idx / (raid_bdev->num_base_bdevs - 1));
+	       (start_strip_idx / (raid_bdev->num_base_bdevs - 1) ==
+		end_strip_idx / (raid_bdev->num_base_bdevs - 1));
 }
 
 static inline void
@@ -120,7 +120,7 @@ static uint64_t
 raid5_stripe_idx(struct spdk_bdev_io *bdev_io, struct raid_bdev *raid_bdev)
 {
 	uint64_t start_strip_idx = bdev_io->u.bdev.offset_blocks >>
-					raid_bdev->strip_size_shift;
+				   raid_bdev->strip_size_shift;
 	return start_strip_idx / (raid_bdev->num_base_bdevs - 1);
 }
 
@@ -132,12 +132,12 @@ raid5_start_strip_idx(struct spdk_bdev_io *bdev_io, struct raid_bdev *raid_bdev)
 
 	start_strip_idx = bdev_io->u.bdev.offset_blocks >> raid_bdev->strip_size_shift;
 	parity_strip_idx = raid5_parity_strip_index(raid_bdev,
-			start_strip_idx / (raid_bdev->num_base_bdevs - 1));
+			   start_strip_idx / (raid_bdev->num_base_bdevs - 1));
 	start_strip_idx %= (raid_bdev->num_base_bdevs - 1);
 	start_strip_idx += 1 + parity_strip_idx;
 	return  start_strip_idx >= raid_bdev->num_base_bdevs ?
-			start_strip_idx - raid_bdev->num_base_bdevs :
-			start_strip_idx;
+		start_strip_idx - raid_bdev->num_base_bdevs :
+		start_strip_idx;
 }
 
 static uint64_t
@@ -149,12 +149,12 @@ raid5_end_strip_idx(struct spdk_bdev_io *bdev_io, struct raid_bdev *raid_bdev)
 	end_strip_idx = (bdev_io->u.bdev.offset_blocks + bdev_io->u.bdev.num_blocks - 1) >>
 			raid_bdev->strip_size_shift;
 	parity_strip_idx = raid5_parity_strip_index(raid_bdev,
-			end_strip_idx / (raid_bdev->num_base_bdevs - 1));
+			   end_strip_idx / (raid_bdev->num_base_bdevs - 1));
 	end_strip_idx %= (raid_bdev->num_base_bdevs - 1);
 	end_strip_idx += 1 + parity_strip_idx;
 	return end_strip_idx >= raid_bdev->num_base_bdevs ?
-			end_strip_idx - raid_bdev->num_base_bdevs :
-			end_strip_idx;
+	       end_strip_idx - raid_bdev->num_base_bdevs :
+	       end_strip_idx;
 }
 
 static uint64_t
@@ -164,11 +164,11 @@ raid5_ofs_blcks(struct spdk_bdev_io *bdev_io, struct raid_bdev *raid_bdev, uint6
 
 	if (idx == ststrip_idx) {
 		return (((bdev_io->u.bdev.offset_blocks >> raid_bdev->strip_size_shift) /
-				(raid_bdev->num_base_bdevs - 1)) << raid_bdev->strip_size_shift) +
-				(bdev_io->u.bdev.offset_blocks & (raid_bdev->strip_size - 1));
+			 (raid_bdev->num_base_bdevs - 1)) << raid_bdev->strip_size_shift) +
+		       (bdev_io->u.bdev.offset_blocks & (raid_bdev->strip_size - 1));
 	} else {
 		return ((bdev_io->u.bdev.offset_blocks >> raid_bdev->strip_size_shift) /
-				(raid_bdev->num_base_bdevs - 1)) << raid_bdev->strip_size_shift;
+			(raid_bdev->num_base_bdevs - 1)) << raid_bdev->strip_size_shift;
 	}
 }
 
@@ -187,31 +187,32 @@ raid5_num_blcks(struct spdk_bdev_io *bdev_io, struct raid_bdev *raid_bdev, uint6
 		}
 	} else if (idx == estrip_idx) {
 		return ((bdev_io->u.bdev.num_blocks + st_ofs - 1) &
-				(raid_bdev->strip_size - 1)) + 1;
+			(raid_bdev->strip_size - 1)) + 1;
 	} else {
 		return raid_bdev->strip_size;
 	}
 }
 
 static inline bool
-raid5_is_req_strip(uint64_t ststrip_idx, uint64_t estrip_idx, uint64_t idx) {
+raid5_is_req_strip(uint64_t ststrip_idx, uint64_t estrip_idx, uint64_t idx)
+{
 	return (ststrip_idx <= estrip_idx) ?
-			(ststrip_idx <= idx) && (idx <= estrip_idx) :
-			(ststrip_idx <= idx) || (idx <= estrip_idx);
+	       (ststrip_idx <= idx) && (idx <= estrip_idx) :
+	       (ststrip_idx <= idx) || (idx <= estrip_idx);
 }
 
 static inline uint64_t
 raid5_next_idx(uint64_t curr, struct raid_bdev *raid_bdev)
 {
 	return (curr + 1) >= raid_bdev->num_base_bdevs ?
-			curr + 1 - raid_bdev->num_base_bdevs :
-			curr + 1;
+	       curr + 1 - raid_bdev->num_base_bdevs :
+	       curr + 1;
 }
 
 static void
 raid5_xor_iovs_with_iovs(struct iovec *xor_iovs, int xor_iovcnt, uint64_t xor_ofs_b8,
-				struct iovec *iovs, int iovcnt, uint64_t ofs_b8,
-				uint64_t num_b8)
+			 struct iovec *iovs, int iovcnt, uint64_t ofs_b8,
+			 uint64_t num_b8)
 {
 	uint64_t *xb8;
 	uint64_t *b8;
@@ -236,7 +237,7 @@ raid5_xor_iovs_with_iovs(struct iovec *xor_iovs, int xor_iovcnt, uint64_t xor_of
 		b8 = iovs[idx].iov_base;
 		b8 = &b8[ofs8];
 		if (xor_iovs[xor_idx].iov_len / 8 - xofs8 >
-				iovs[idx].iov_len / 8 - ofs8) {
+		    iovs[idx].iov_len / 8 - ofs8) {
 			if (num_b8 + ofs8 < iovs[idx].iov_len / 8) {
 				for (uint64_t i = 0; i < num_b8; ++i) {
 					xb8[i] ^= b8[i];
@@ -252,7 +253,7 @@ raid5_xor_iovs_with_iovs(struct iovec *xor_iovs, int xor_iovcnt, uint64_t xor_of
 				ofs8 = 0;
 			}
 		} else if (xor_iovs[xor_idx].iov_len / 8 - xofs8 <
-				iovs[idx].iov_len / 8 - ofs8) {
+			   iovs[idx].iov_len / 8 - ofs8) {
 			if (num_b8 + xofs8 < xor_iovs[xor_idx].iov_len / 8) {
 				for (uint64_t i = 0; i < num_b8; ++i) {
 					xb8[i] ^= b8[i];
@@ -274,7 +275,7 @@ raid5_xor_iovs_with_iovs(struct iovec *xor_iovs, int xor_iovcnt, uint64_t xor_of
 				}
 				num_b8 = 0;
 			} else {
-				for (uint64_t i = 0; i < (iovs[idx].iov_len / 8)- ofs8; ++i) {
+				for (uint64_t i = 0; i < (iovs[idx].iov_len / 8) - ofs8; ++i) {
 					xb8[i] ^= b8[i];
 				}
 				num_b8 -= iovs[idx].iov_len / 8 - ofs8;
@@ -317,7 +318,8 @@ raid5_get_stripe_request(struct raid_bdev_io *raid_io)
 }
 
 static void
-raid5_free_stripe_request(struct raid5_stripe_request *request) {
+raid5_free_stripe_request(struct raid5_stripe_request *request)
+{
 	free(request->strip_buffs_cnts);
 	free(request->strip_buffs);
 	free(request);
@@ -325,7 +327,7 @@ raid5_free_stripe_request(struct raid5_stripe_request *request) {
 
 static int
 raid5_allocate_strips_buffs_until(struct raid5_stripe_request *request,
-				uint8_t start_idx, uint8_t until_idx, uint64_t num_blcks)
+				  uint8_t start_idx, uint8_t until_idx, uint64_t num_blcks)
 {
 	struct raid_bdev *raid_bdev = request->raid_io->raid_bdev;
 	uint64_t block_size_b = ((uint64_t)1024 * raid_bdev->strip_size_kb) / raid_bdev->strip_size;
@@ -347,7 +349,7 @@ raid5_allocate_strips_buffs_until(struct raid5_stripe_request *request,
 
 static void
 raid5_free_strips_buffs_until(struct raid5_stripe_request *request,
-				uint8_t start_idx, uint8_t until_idx)
+			      uint8_t start_idx, uint8_t until_idx)
 {
 	struct raid_bdev *raid_bdev = request->raid_io->raid_bdev;
 
@@ -393,10 +395,10 @@ raid5_set_req_strips_iovs_until(struct raid5_stripe_request *request,
 			request->strip_buffs_cnts[idx] = 0;
 			return -ENOMEM;
 		}
-		
+
 		iov_base_b8 = bdev_io->u.bdev.iovs[*iov_idx].iov_base;
 		request->strip_buffs[idx][0].iov_base =
-				&iov_base_b8[(bdev_io->u.bdev.iovs[*iov_idx].iov_len - *remaining_len) / 8];
+			&iov_base_b8[(bdev_io->u.bdev.iovs[*iov_idx].iov_len - *remaining_len) / 8];
 		if (*remaining_len >= num_blcks * block_size_b) {
 			request->strip_buffs[idx][0].iov_len = num_blcks * block_size_b;
 			len -= num_blcks * block_size_b;
@@ -410,7 +412,7 @@ raid5_set_req_strips_iovs_until(struct raid5_stripe_request *request,
 				len -= request->strip_buffs[idx][i - *iov_idx].iov_len;
 			}
 			request->strip_buffs[idx][request->strip_buffs_cnts[idx] - 1].iov_base =
-					bdev_io->u.bdev.iovs[end_iov_idx].iov_base;
+				bdev_io->u.bdev.iovs[end_iov_idx].iov_base;
 			request->strip_buffs[idx][request->strip_buffs_cnts[idx] - 1].iov_len = len;
 			*remaining_len = bdev_io->u.bdev.iovs[end_iov_idx].iov_len - len;
 			*iov_idx = end_iov_idx;
@@ -423,12 +425,12 @@ raid5_set_req_strips_iovs_until(struct raid5_stripe_request *request,
 			}
 		}
 	}
-	return 0;	
+	return 0;
 }
 
 static void
 raid5_free_req_strips_iovs_until(struct raid5_stripe_request *request,
-				uint8_t start_idx, uint8_t until_idx)
+				 uint8_t start_idx, uint8_t until_idx)
 {
 	struct raid_bdev *raid_bdev = request->raid_io->raid_bdev;
 
@@ -449,7 +451,8 @@ raid5_set_all_req_strips_iovs(struct raid5_stripe_request *request)
 	uint64_t			remaining_len = bdev_io->u.bdev.iovs[0].iov_len;
 	int			iov_idx = 0;
 
-	return raid5_set_req_strips_iovs_until(request, ststrip_idx, after_estrip_idx, &iov_idx, &remaining_len);
+	return raid5_set_req_strips_iovs_until(request, ststrip_idx, after_estrip_idx, &iov_idx,
+					       &remaining_len);
 }
 
 static void
@@ -465,7 +468,8 @@ raid5_free_all_req_strips_iovs(struct raid5_stripe_request *request)
 }
 
 static int
-raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blcks, uint64_t num_blcks)
+raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blcks,
+			  uint64_t num_blcks)
 {
 	struct spdk_bdev_io			*bdev_io = spdk_bdev_io_from_ctx(request->raid_io);
 	struct raid_bdev			*raid_bdev = request->raid_io->raid_bdev;
@@ -491,7 +495,7 @@ raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blc
 
 	// start req strip
 	sts_idx_ofs = ofs_blcks != raid5_ofs_blcks(bdev_io, raid_bdev, sts_idx) ?
-					1 : 0;
+		      1 : 0;
 
 	blocks = raid5_num_blcks(bdev_io, raid_bdev, sts_idx);
 	end_iov_idx = iov_idx;
@@ -509,12 +513,12 @@ raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blc
 		request->strip_buffs_cnts[sts_idx] = 0;
 		return -ENOMEM;
 	}
-	
+
 	len = blocks * block_size_b;
-	
+
 	iov_base_b8 = bdev_io->u.bdev.iovs[iov_idx].iov_base;
 	request->strip_buffs[sts_idx][sts_idx_ofs].iov_base =
-			&iov_base_b8[(bdev_io->u.bdev.iovs[iov_idx].iov_len - remaining_len) / 8];
+		&iov_base_b8[(bdev_io->u.bdev.iovs[iov_idx].iov_len - remaining_len) / 8];
 
 	if (remaining_len >= blocks * block_size_b) {
 		request->strip_buffs[sts_idx][sts_idx_ofs].iov_len = blocks * block_size_b;
@@ -524,12 +528,13 @@ raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blc
 		request->strip_buffs[sts_idx][sts_idx_ofs].iov_len = remaining_len;
 		len -= remaining_len;
 		for (uint8_t i = iov_idx + 1; i < end_iov_idx; ++i) {
-			request->strip_buffs[sts_idx][sts_idx_ofs + i - iov_idx].iov_base = bdev_io->u.bdev.iovs[i].iov_base;
+			request->strip_buffs[sts_idx][sts_idx_ofs + i - iov_idx].iov_base =
+				bdev_io->u.bdev.iovs[i].iov_base;
 			request->strip_buffs[sts_idx][sts_idx_ofs + i - iov_idx].iov_len = bdev_io->u.bdev.iovs[i].iov_len;
 			len -= request->strip_buffs[sts_idx][sts_idx_ofs + i - iov_idx].iov_len;
 		}
 		request->strip_buffs[sts_idx][request->strip_buffs_cnts[sts_idx] - 1].iov_base =
-				bdev_io->u.bdev.iovs[end_iov_idx].iov_base;
+			bdev_io->u.bdev.iovs[end_iov_idx].iov_base;
 		request->strip_buffs[sts_idx][request->strip_buffs_cnts[sts_idx] - 1].iov_len = len;
 		remaining_len = bdev_io->u.bdev.iovs[end_iov_idx].iov_len - len;
 		iov_idx = end_iov_idx;
@@ -544,9 +549,9 @@ raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blc
 
 	if (sts_idx_ofs == 1) {
 		request->strip_buffs[sts_idx][0].iov_len = (raid5_ofs_blcks(bdev_io, raid_bdev, sts_idx)
-						- ofs_blcks) * block_size_b;
+				- ofs_blcks) * block_size_b;
 		request->strip_buffs[sts_idx][0].iov_base = calloc(request->strip_buffs[sts_idx][0].iov_len,
-						sizeof(char));
+				sizeof(char));
 		if (request->strip_buffs[sts_idx][0].iov_base == NULL) {
 			raid5_free_strips_buffs_until(request, after_es_idx, sts_idx);
 			free(request->strip_buffs[sts_idx]);
@@ -562,8 +567,8 @@ raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blc
 
 	// middle req strip
 	ret = raid5_set_req_strips_iovs_until(request,
-					raid5_next_idx(sts_idx, raid_bdev), es_idx,
-					&iov_idx, &remaining_len);
+					      raid5_next_idx(sts_idx, raid_bdev), es_idx,
+					      &iov_idx, &remaining_len);
 	if (ret != 0) {
 		raid5_free_strips_buffs_until(request, after_es_idx, sts_idx);
 		if (sts_idx_ofs == 1) {
@@ -572,15 +577,15 @@ raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blc
 		free(request->strip_buffs[sts_idx]);
 		request->strip_buffs[sts_idx] = NULL;
 		request->strip_buffs_cnts[sts_idx] = 0;
-		
+
 		return ret;
 	}
 
 	// end req strip
 	es_idx_extra = ofs_blcks + num_blcks >
-			raid5_ofs_blcks(bdev_io, raid_bdev, es_idx) +
-			raid5_num_blcks(bdev_io, raid_bdev, es_idx) ?
-			1 : 0;
+		       raid5_ofs_blcks(bdev_io, raid_bdev, es_idx) +
+		       raid5_num_blcks(bdev_io, raid_bdev, es_idx) ?
+		       1 : 0;
 
 	blocks = raid5_num_blcks(bdev_io, raid_bdev, es_idx);
 	end_iov_idx = iov_idx;
@@ -602,7 +607,7 @@ raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blc
 		request->strip_buffs[sts_idx] = NULL;
 		request->strip_buffs_cnts[sts_idx] = 0;
 		raid5_free_req_strips_iovs_until(request,
-						raid5_next_idx(sts_idx, raid_bdev), es_idx);
+						 raid5_next_idx(sts_idx, raid_bdev), es_idx);
 		request->strip_buffs_cnts[es_idx] = 0;
 		return -ENOMEM;
 	}
@@ -611,7 +616,7 @@ raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blc
 
 	iov_base_b8 = bdev_io->u.bdev.iovs[iov_idx].iov_base;
 	request->strip_buffs[es_idx][0].iov_base =
-			&iov_base_b8[(bdev_io->u.bdev.iovs[iov_idx].iov_len - remaining_len) / 8];
+		&iov_base_b8[(bdev_io->u.bdev.iovs[iov_idx].iov_len - remaining_len) / 8];
 	if (remaining_len >= blocks * block_size_b) {
 		request->strip_buffs[es_idx][0].iov_len = blocks * block_size_b;
 		len -= blocks * block_size_b;
@@ -625,7 +630,7 @@ raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blc
 			len -= request->strip_buffs[es_idx][i - iov_idx].iov_len;
 		}
 		request->strip_buffs[es_idx][request->strip_buffs_cnts[es_idx] - 1].iov_base =
-				bdev_io->u.bdev.iovs[end_iov_idx].iov_base;
+			bdev_io->u.bdev.iovs[end_iov_idx].iov_base;
 		request->strip_buffs[es_idx][request->strip_buffs_cnts[es_idx] - 1].iov_len = len;
 		remaining_len = bdev_io->u.bdev.iovs[end_iov_idx].iov_len - len;
 		iov_idx = end_iov_idx;
@@ -640,16 +645,16 @@ raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blc
 
 	if (es_idx_extra == 1) {
 		request->strip_buffs[es_idx][request->strip_buffs_cnts[es_idx] - 1].iov_len =
-						(ofs_blcks + num_blcks -
-						(raid5_ofs_blcks(bdev_io, raid_bdev, es_idx) +
-						raid5_num_blcks(bdev_io, raid_bdev, es_idx))) *
-						block_size_b;
+			(ofs_blcks + num_blcks -
+			 (raid5_ofs_blcks(bdev_io, raid_bdev, es_idx) +
+			  raid5_num_blcks(bdev_io, raid_bdev, es_idx))) *
+			block_size_b;
 		request->strip_buffs[es_idx][request->strip_buffs_cnts[es_idx] - 1].iov_base =
-						calloc(request->strip_buffs[es_idx][request->strip_buffs_cnts[es_idx]
-						- 1].iov_len,
-						sizeof(char));
+			calloc(request->strip_buffs[es_idx][request->strip_buffs_cnts[es_idx]
+					- 1].iov_len,
+			       sizeof(char));
 		if (request->strip_buffs[es_idx][request->strip_buffs_cnts[es_idx] - 1].iov_base
-				== NULL) {
+		    == NULL) {
 			raid5_free_strips_buffs_until(request, after_es_idx, sts_idx);
 			if (sts_idx_ofs == 1) {
 				free(request->strip_buffs[sts_idx][0].iov_base);
@@ -658,7 +663,7 @@ raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blc
 			request->strip_buffs[sts_idx] = NULL;
 			request->strip_buffs_cnts[sts_idx] = 0;
 			raid5_free_req_strips_iovs_until(request,
-							raid5_next_idx(sts_idx, raid_bdev), es_idx);
+							 raid5_next_idx(sts_idx, raid_bdev), es_idx);
 			free(request->strip_buffs[es_idx]);
 			request->strip_buffs[es_idx] = NULL;
 			request->strip_buffs_cnts[es_idx] = 0;
@@ -669,7 +674,8 @@ raid5_set_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blc
 }
 
 static void
-raid5_free_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blcks, uint64_t num_blcks)
+raid5_free_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_blcks,
+			   uint64_t num_blcks)
 {
 	struct spdk_bdev_io			*bdev_io = spdk_bdev_io_from_ctx(request->raid_io);
 	struct raid_bdev			*raid_bdev = request->raid_io->raid_bdev;
@@ -690,12 +696,12 @@ raid5_free_all_strip_buffs(struct raid5_stripe_request *request, uint64_t ofs_bl
 	}
 
 	raid5_free_req_strips_iovs_until(request,
-					raid5_next_idx(sts_idx, raid_bdev), es_idx);
+					 raid5_next_idx(sts_idx, raid_bdev), es_idx);
 
 	if (ofs_blcks + num_blcks > raid5_ofs_blcks(bdev_io, raid_bdev, es_idx) +
-			raid5_num_blcks(bdev_io, raid_bdev, es_idx)) {
+	    raid5_num_blcks(bdev_io, raid_bdev, es_idx)) {
 		free(request->strip_buffs[es_idx][request->strip_buffs_cnts[es_idx]
-				- 1].iov_base);
+						  - 1].iov_base);
 	}
 	free(request->strip_buffs[es_idx]);
 	request->strip_buffs[es_idx] = NULL;
@@ -885,10 +891,10 @@ raid5_write_broken_req_set_strip_buffs(struct raid5_stripe_request *request)
 	uint64_t			after_sts_idx = raid5_next_idx(sts_idx, raid_bdev);
 	uint64_t			es_idx = raid5_end_strip_idx(bdev_io, raid_bdev);
 	uint64_t			after_es_idx = raid5_next_idx(es_idx, raid_bdev);
-	
+
 	if (sts_idx == es_idx) {
 		return raid5_allocate_strips_buffs_until(request, after_sts_idx, sts_idx,
-					raid5_num_blcks(bdev_io, raid_bdev, sts_idx));
+				raid5_num_blcks(bdev_io, raid_bdev, sts_idx));
 	} else if (request->broken_strip_idx != sts_idx && request->broken_strip_idx != es_idx) {
 		return raid5_allocate_strips_buffs_until(request, es_idx, after_sts_idx, raid_bdev->strip_size);
 	} else if (request->broken_strip_idx == sts_idx) {
@@ -907,7 +913,7 @@ raid5_w_br_r_reading_free_strip_buffs(struct raid5_stripe_request *request)
 	uint64_t			after_sts_idx = raid5_next_idx(sts_idx, raid_bdev);
 	uint64_t			es_idx = raid5_end_strip_idx(bdev_io, raid_bdev);
 	uint64_t			after_es_idx = raid5_next_idx(es_idx, raid_bdev);
-	
+
 	if (sts_idx == es_idx) {
 		raid5_free_strips_buffs_until(request, after_sts_idx, sts_idx);
 	} else if (request->broken_strip_idx != sts_idx && request->broken_strip_idx != es_idx) {
@@ -931,7 +937,7 @@ raid5_write_broken_req_reset_strip_buffs(struct raid5_stripe_request *request)
 	uint64_t			ps_idx = raid5_parity_strip_index(raid_bdev, raid5_stripe_idx(bdev_io, raid_bdev));
 	uint64_t			after_ps_idx = raid5_next_idx(ps_idx, raid_bdev);
 	int				ret = 0;
-	
+
 	if (sts_idx == es_idx) {
 		raid5_free_strips_buffs_until(request, after_sts_idx, ps_idx);
 		raid5_free_strips_buffs_until(request, after_ps_idx, sts_idx);
@@ -971,12 +977,12 @@ raid5_stripe_req_complete(struct raid5_stripe_request *request)
 
 	raid5_free_stripe_request(request);
 
-	raid_bdev_io_complete(raid_io, raid_io->base_bdev_io_status);	
+	raid_bdev_io_complete(raid_io, raid_io->base_bdev_io_status);
 }
 
 static bool
 raid5_read_complete_part(struct raid5_stripe_request *request, uint64_t completed,
-				enum spdk_bdev_io_status status)
+			 enum spdk_bdev_io_status status)
 {
 	struct raid_bdev_io *raid_io = request->raid_io;
 
@@ -992,7 +998,7 @@ raid5_read_complete_part(struct raid5_stripe_request *request, uint64_t complete
 			struct raid_bdev 		*raid_bdev = raid_io->raid_bdev;
 			struct spdk_bdev_io		*bdev_io = spdk_bdev_io_from_ctx(raid_io);
 			uint64_t block_size_b8 = ((uint64_t)128 * raid_bdev->strip_size_kb)
-					/ raid_bdev->strip_size;
+						 / raid_bdev->strip_size;
 			uint64_t br_ofs_b8 = block_size_b8 * raid5_ofs_blcks(bdev_io, raid_bdev, request->broken_strip_idx);
 			uint64_t br_num_b8 = block_size_b8 * raid5_num_blcks(bdev_io, raid_bdev, request->broken_strip_idx);
 			uint64_t ofs_b8;
@@ -1001,13 +1007,13 @@ raid5_read_complete_part(struct raid5_stripe_request *request, uint64_t complete
 			uint8_t after_es_idx = raid5_next_idx(es_idx, raid_bdev);
 			uint8_t after_broken = raid5_next_idx(request->broken_strip_idx, raid_bdev);
 			raid5_fill_iovs_with_zeroes(request->strip_buffs[request->broken_strip_idx],
-							request->strip_buffs_cnts[request->broken_strip_idx]);
+						    request->strip_buffs_cnts[request->broken_strip_idx]);
 
 			for (uint8_t i = after_es_idx; i != sts_idx; i = raid5_next_idx(i, raid_bdev)) {
 				raid5_xor_iovs_with_iovs(request->strip_buffs[request->broken_strip_idx],
-						request->strip_buffs_cnts[request->broken_strip_idx], 0,
-						request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
-						br_num_b8);
+							 request->strip_buffs_cnts[request->broken_strip_idx], 0,
+							 request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
+							 br_num_b8);
 			}
 
 			for (uint8_t i = sts_idx; i != request->broken_strip_idx; i = raid5_next_idx(i, raid_bdev)) {
@@ -1018,9 +1024,9 @@ raid5_read_complete_part(struct raid5_stripe_request *request, uint64_t complete
 					ofs_b8 = 0;
 				}
 				raid5_xor_iovs_with_iovs(request->strip_buffs[request->broken_strip_idx],
-						request->strip_buffs_cnts[request->broken_strip_idx], 0,
-						request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
-						br_num_b8);
+							 request->strip_buffs_cnts[request->broken_strip_idx], 0,
+							 request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
+							 br_num_b8);
 			}
 
 			for (uint8_t i = after_broken; i != after_es_idx; i = raid5_next_idx(i, raid_bdev)) {
@@ -1031,9 +1037,9 @@ raid5_read_complete_part(struct raid5_stripe_request *request, uint64_t complete
 					ofs_b8 = 0;
 				}
 				raid5_xor_iovs_with_iovs(request->strip_buffs[request->broken_strip_idx],
-						request->strip_buffs_cnts[request->broken_strip_idx], 0,
-						request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
-						br_num_b8);
+							 request->strip_buffs_cnts[request->broken_strip_idx], 0,
+							 request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
+							 br_num_b8);
 			}
 
 			raid5_read_exc_req_strip_free_strip_buffs(request);
@@ -1048,14 +1054,16 @@ raid5_read_complete_part(struct raid5_stripe_request *request, uint64_t complete
 	}
 }
 
-static void raid5_read_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg) {
+static void
+raid5_read_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg)
+{
 	struct raid5_stripe_request *request = cb_arg;
 
 	spdk_bdev_free_io(bdev_io);
 
 	raid5_read_complete_part(request, 1, success ?
-					SPDK_BDEV_IO_STATUS_SUCCESS :
-					SPDK_BDEV_IO_STATUS_FAILED);
+				 SPDK_BDEV_IO_STATUS_SUCCESS :
+				 SPDK_BDEV_IO_STATUS_FAILED);
 }
 
 static void raid5_read_req_strips(struct raid5_stripe_request *request);
@@ -1084,32 +1092,32 @@ raid5_read_req_strips(struct raid5_stripe_request *request)
 	int				ret = 0;
 
 	start_idx = (ststrip_idx + raid_io->base_bdev_io_submitted) > raid_bdev->num_base_bdevs ?
-				ststrip_idx + raid_io->base_bdev_io_submitted - raid_bdev->num_base_bdevs :
-				ststrip_idx + raid_io->base_bdev_io_submitted;
+		    ststrip_idx + raid_io->base_bdev_io_submitted - raid_bdev->num_base_bdevs :
+		    ststrip_idx + raid_io->base_bdev_io_submitted;
 
 	for (uint8_t idx = start_idx; idx != after_estrip_idx; idx = raid5_next_idx(idx, raid_bdev)) {
 		base_info = &raid_bdev->base_bdev_info[idx];
 		base_ch = raid_ch->base_channel[idx];
 
 		ret = spdk_bdev_readv_blocks(base_info->desc, base_ch,
-											request->strip_buffs[idx], request->strip_buffs_cnts[idx],
-											raid5_ofs_blcks(bdev_io, raid_bdev, idx),
-											raid5_num_blcks(bdev_io, raid_bdev, idx),
-											raid5_read_cb,
-											request);
+					     request->strip_buffs[idx], request->strip_buffs_cnts[idx],
+					     raid5_ofs_blcks(bdev_io, raid_bdev, idx),
+					     raid5_num_blcks(bdev_io, raid_bdev, idx),
+					     raid5_read_cb,
+					     request);
 
 		if (spdk_unlikely(ret != 0)) {
 			if (spdk_unlikely(ret == -ENOMEM)) {
 				raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-							base_ch, _raid5_read_req_strips, request);
+						    base_ch, _raid5_read_req_strips, request);
 				return;
 			}
 
 			base_bdev_io_not_submitted = ((estrip_idx + raid_bdev->num_base_bdevs) -
-							ststrip_idx) % raid_bdev->num_base_bdevs + 1 -
-							raid_io->base_bdev_io_submitted;
+						      ststrip_idx) % raid_bdev->num_base_bdevs + 1 -
+						     raid_io->base_bdev_io_submitted;
 			raid5_read_complete_part(request, base_bdev_io_not_submitted,
-							SPDK_BDEV_IO_STATUS_FAILED);
+						 SPDK_BDEV_IO_STATUS_FAILED);
 			return;
 		}
 
@@ -1145,10 +1153,11 @@ raid5_read_except_one_req_strip(struct raid5_stripe_request *request)
 	int				ret = 0;
 
 	start_idx = (after_brstrip_idx + raid_io->base_bdev_io_submitted) > raid_bdev->num_base_bdevs ?
-				after_brstrip_idx + raid_io->base_bdev_io_submitted - raid_bdev->num_base_bdevs :
-				after_brstrip_idx + raid_io->base_bdev_io_submitted;
-	
-	for (uint8_t idx = start_idx; idx != request->broken_strip_idx; idx = raid5_next_idx(idx, raid_bdev)) {
+		    after_brstrip_idx + raid_io->base_bdev_io_submitted - raid_bdev->num_base_bdevs :
+		    after_brstrip_idx + raid_io->base_bdev_io_submitted;
+
+	for (uint8_t idx = start_idx; idx != request->broken_strip_idx;
+	     idx = raid5_next_idx(idx, raid_bdev)) {
 		base_info = &raid_bdev->base_bdev_info[idx];
 		base_ch = raid_ch->base_channel[idx];
 		ofs_blcks = raid5_ofs_blcks(bdev_io, raid_bdev, request->broken_strip_idx);
@@ -1164,22 +1173,22 @@ raid5_read_except_one_req_strip(struct raid5_stripe_request *request)
 		}
 
 		ret = spdk_bdev_readv_blocks(base_info->desc, base_ch,
-											request->strip_buffs[idx], request->strip_buffs_cnts[idx],
-											ofs_blcks, num_blcks,
-											raid5_read_cb,
-											request);
+					     request->strip_buffs[idx], request->strip_buffs_cnts[idx],
+					     ofs_blcks, num_blcks,
+					     raid5_read_cb,
+					     request);
 
 		if (spdk_unlikely(ret != 0)) {
 			if (spdk_unlikely(ret == -ENOMEM)) {
 				raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-							base_ch, _raid5_read_except_one_req_strip, request);
+						    base_ch, _raid5_read_except_one_req_strip, request);
 				return;
 			}
 
 			base_bdev_io_not_submitted = raid_bdev->num_base_bdevs - 1 -
-							raid_io->base_bdev_io_submitted;
+						     raid_io->base_bdev_io_submitted;
 			raid5_read_complete_part(request, base_bdev_io_not_submitted,
-							SPDK_BDEV_IO_STATUS_FAILED);
+						 SPDK_BDEV_IO_STATUS_FAILED);
 			return;
 		}
 
@@ -1227,7 +1236,7 @@ raid5_submit_read_request(struct raid5_stripe_request *request)
 
 		raid_io->base_bdev_io_submitted = 0;
 		raid_io->base_bdev_io_remaining = ((estrip_idx + raid_bdev->num_base_bdevs) -
-				ststrip_idx) % raid_bdev->num_base_bdevs + 1;
+						   ststrip_idx) % raid_bdev->num_base_bdevs + 1;
 		raid5_read_req_strips(request);
 	} else {
 		for (uint8_t idx = after_estrip_idx; idx != ststrip_idx; idx = raid5_next_idx(idx, raid_bdev)) {
@@ -1258,7 +1267,7 @@ raid5_submit_read_request(struct raid5_stripe_request *request)
 
 static bool
 raid5_w_default_writing_complete_part(struct raid5_stripe_request *request, uint64_t completed,
-				enum spdk_bdev_io_status status)
+				      enum spdk_bdev_io_status status)
 {
 	struct raid_bdev_io *raid_io = request->raid_io;
 
@@ -1280,14 +1289,15 @@ raid5_w_default_writing_complete_part(struct raid5_stripe_request *request, uint
 }
 
 static void
-raid5_w_default_writing_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg) {
+raid5_w_default_writing_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg)
+{
 	struct raid5_stripe_request *request = cb_arg;
 
 	spdk_bdev_free_io(bdev_io);
 
 	raid5_w_default_writing_complete_part(request, 1, success ?
-					SPDK_BDEV_IO_STATUS_SUCCESS :
-					SPDK_BDEV_IO_STATUS_FAILED);
+					      SPDK_BDEV_IO_STATUS_SUCCESS :
+					      SPDK_BDEV_IO_STATUS_FAILED);
 }
 
 static void raid5_write_default_writing(struct raid5_stripe_request *request);
@@ -1313,7 +1323,7 @@ raid5_write_default_writing(struct raid5_stripe_request *request)
 	uint64_t			after_es_idx = raid5_next_idx(es_idx, raid_bdev);
 	uint64_t			ps_idx = raid5_parity_strip_index(raid_bdev, raid5_stripe_idx(bdev_io, raid_bdev));
 	uint64_t			num_strips_to_w = (((es_idx + raid_bdev->num_base_bdevs) -
-								sts_idx) % raid_bdev->num_base_bdevs) + 2;
+			sts_idx) % raid_bdev->num_base_bdevs) + 2;
 	uint64_t			base_bdev_io_not_submitted;
 	uint64_t			ofs_blcks = raid5_ofs_blcks(bdev_io, raid_bdev, es_idx);
 	uint64_t			num_blcks;
@@ -1331,21 +1341,21 @@ raid5_write_default_writing(struct raid5_stripe_request *request)
 		base_ch = raid_ch->base_channel[ps_idx];
 
 		ret = spdk_bdev_writev_blocks(base_info->desc, base_ch,
-										request->strip_buffs[ps_idx], request->strip_buffs_cnts[ps_idx],
-										ofs_blcks, num_blcks,
-										raid5_w_default_writing_cb,
-										request);
+					      request->strip_buffs[ps_idx], request->strip_buffs_cnts[ps_idx],
+					      ofs_blcks, num_blcks,
+					      raid5_w_default_writing_cb,
+					      request);
 
 		if (spdk_unlikely(ret != 0)) {
 			if (spdk_unlikely(ret == -ENOMEM)) {
 				raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-							base_ch, _raid5_write_default_writing, request);
+						    base_ch, _raid5_write_default_writing, request);
 				return;
 			}
 
 			base_bdev_io_not_submitted = num_strips_to_w - raid_io->base_bdev_io_submitted;
 			raid5_w_default_writing_complete_part(request, base_bdev_io_not_submitted,
-							SPDK_BDEV_IO_STATUS_FAILED);
+							      SPDK_BDEV_IO_STATUS_FAILED);
 			return;
 		}
 		++raid_io->base_bdev_io_submitted;
@@ -1357,21 +1367,21 @@ raid5_write_default_writing(struct raid5_stripe_request *request)
 		base_ch = raid_ch->base_channel[idx];
 
 		ret = spdk_bdev_writev_blocks(base_info->desc, base_ch,
-											request->strip_buffs[idx], request->strip_buffs_cnts[idx],
-											ofs_blcks, num_blcks,
-											raid5_w_default_writing_cb,
-											request);
+					      request->strip_buffs[idx], request->strip_buffs_cnts[idx],
+					      ofs_blcks, num_blcks,
+					      raid5_w_default_writing_cb,
+					      request);
 
 		if (spdk_unlikely(ret != 0)) {
 			if (spdk_unlikely(ret == -ENOMEM)) {
 				raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-							base_ch, _raid5_write_default_writing, request);
+						    base_ch, _raid5_write_default_writing, request);
 				return;
 			}
 
 			base_bdev_io_not_submitted = num_strips_to_w - raid_io->base_bdev_io_submitted;
 			raid5_w_default_writing_complete_part(request, base_bdev_io_not_submitted,
-							SPDK_BDEV_IO_STATUS_FAILED);
+							      SPDK_BDEV_IO_STATUS_FAILED);
 			return;
 		}
 
@@ -1381,7 +1391,7 @@ raid5_write_default_writing(struct raid5_stripe_request *request)
 
 static bool
 raid5_w_default_reading_complete_part(struct raid5_stripe_request *request, uint64_t completed,
-				enum spdk_bdev_io_status status)
+				      enum spdk_bdev_io_status status)
 {
 	struct raid_bdev_io *raid_io = request->raid_io;
 
@@ -1396,7 +1406,7 @@ raid5_w_default_reading_complete_part(struct raid5_stripe_request *request, uint
 		struct raid_bdev 		*raid_bdev = raid_io->raid_bdev;
 		struct spdk_bdev_io		*bdev_io = spdk_bdev_io_from_ctx(raid_io);
 		uint64_t block_size_b8 = ((uint64_t)128 * raid_bdev->strip_size_kb) /
-					raid_bdev->strip_size;
+					 raid_bdev->strip_size;
 		uint8_t sts_idx = raid5_start_strip_idx(bdev_io, raid_bdev);
 		uint8_t es_idx = raid5_end_strip_idx(bdev_io, raid_bdev);
 		uint8_t ps_idx = raid5_parity_strip_index(raid_bdev, raid5_stripe_idx(bdev_io, raid_bdev));
@@ -1417,21 +1427,21 @@ raid5_w_default_reading_complete_part(struct raid5_stripe_request *request, uint
 
 		for (uint8_t i = sts_idx; i != ps_idx; i = raid5_next_idx(i, raid_bdev)) {
 			raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-					request->strip_buffs_cnts[ps_idx], 0,
-					request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
-					num_b8);
+						 request->strip_buffs_cnts[ps_idx], 0,
+						 request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
+						 num_b8);
 		}
 
 		for (uint8_t i = after_ps_idx; i != sts_idx; i = raid5_next_idx(i, raid_bdev)) {
 			raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-					request->strip_buffs_cnts[ps_idx], 0,
-					request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
-					num_b8);
+						 request->strip_buffs_cnts[ps_idx], 0,
+						 request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
+						 num_b8);
 		}
 
 		raid_io->base_bdev_io_submitted = 0;
 		raid_io->base_bdev_io_remaining = (((es_idx + raid_bdev->num_base_bdevs) -
-					sts_idx) % raid_bdev->num_base_bdevs) + 2;
+						    sts_idx) % raid_bdev->num_base_bdevs) + 2;
 
 		raid5_write_default_writing(request);
 
@@ -1442,14 +1452,15 @@ raid5_w_default_reading_complete_part(struct raid5_stripe_request *request, uint
 }
 
 static void
-raid5_w_default_reading_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg) {
+raid5_w_default_reading_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg)
+{
 	struct raid5_stripe_request *request = cb_arg;
 
 	spdk_bdev_free_io(bdev_io);
 
 	raid5_w_default_reading_complete_part(request, 1, success ?
-					SPDK_BDEV_IO_STATUS_SUCCESS :
-					SPDK_BDEV_IO_STATUS_FAILED);
+					      SPDK_BDEV_IO_STATUS_SUCCESS :
+					      SPDK_BDEV_IO_STATUS_FAILED);
 }
 
 static void raid5_write_default_reading(struct raid5_stripe_request *request);
@@ -1486,32 +1497,32 @@ raid5_write_default_reading(struct raid5_stripe_request *request)
 
 	if (sts_idx != es_idx) {
 		num_strips_to_r = raid_bdev->num_base_bdevs - (((es_idx + raid_bdev->num_base_bdevs) -
-					sts_idx) % raid_bdev->num_base_bdevs);
+				  sts_idx) % raid_bdev->num_base_bdevs);
 		if (raid_io->base_bdev_io_submitted == 0) {
 			if (sts_ofs > es_ofs) {
 				base_info = &raid_bdev->base_bdev_info[sts_idx];
 				base_ch = raid_ch->base_channel[sts_idx];
 
 				ret = spdk_bdev_readv_blocks(base_info->desc, base_ch,
-												&request->strip_buffs[sts_idx][0], 1,
-												es_ofs, sts_ofs - es_ofs,
-												raid5_w_default_reading_cb,
-												request);
+							     &request->strip_buffs[sts_idx][0], 1,
+							     es_ofs, sts_ofs - es_ofs,
+							     raid5_w_default_reading_cb,
+							     request);
 				if (spdk_unlikely(ret != 0)) {
 					if (spdk_unlikely(ret == -ENOMEM)) {
 						raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-									base_ch, _raid5_write_default_reading, request);
+								    base_ch, _raid5_write_default_reading, request);
 						return;
 					}
 
 					base_bdev_io_not_submitted = num_strips_to_r - raid_io->base_bdev_io_submitted;
 					raid5_w_default_reading_complete_part(request, base_bdev_io_not_submitted,
-									SPDK_BDEV_IO_STATUS_FAILED);
+									      SPDK_BDEV_IO_STATUS_FAILED);
 					return;
 				}
 			} else {
 				raid5_w_default_reading_complete_part(request, 1,
-								SPDK_BDEV_IO_STATUS_SUCCESS);
+								      SPDK_BDEV_IO_STATUS_SUCCESS);
 			}
 			++raid_io->base_bdev_io_submitted;
 		}
@@ -1521,25 +1532,25 @@ raid5_write_default_reading(struct raid5_stripe_request *request)
 				base_ch = raid_ch->base_channel[es_idx];
 
 				ret = spdk_bdev_readv_blocks(base_info->desc, base_ch,
-												&request->strip_buffs[es_idx][request->strip_buffs_cnts[es_idx] - 1], 1,
-												es_ofs + es_num_blcks, raid_bdev->strip_size - es_num_blcks,
-												raid5_w_default_reading_cb,
-												request);
+							     &request->strip_buffs[es_idx][request->strip_buffs_cnts[es_idx] - 1], 1,
+							     es_ofs + es_num_blcks, raid_bdev->strip_size - es_num_blcks,
+							     raid5_w_default_reading_cb,
+							     request);
 				if (spdk_unlikely(ret != 0)) {
 					if (spdk_unlikely(ret == -ENOMEM)) {
 						raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-									base_ch, _raid5_write_default_reading, request);
+								    base_ch, _raid5_write_default_reading, request);
 						return;
 					}
 
 					base_bdev_io_not_submitted = num_strips_to_r - raid_io->base_bdev_io_submitted;
 					raid5_w_default_reading_complete_part(request, base_bdev_io_not_submitted,
-									SPDK_BDEV_IO_STATUS_FAILED);
+									      SPDK_BDEV_IO_STATUS_FAILED);
 					return;
 				}
 			} else {
 				raid5_w_default_reading_complete_part(request, 1,
-								SPDK_BDEV_IO_STATUS_SUCCESS);
+								      SPDK_BDEV_IO_STATUS_SUCCESS);
 			}
 			++raid_io->base_bdev_io_submitted;
 		}
@@ -1548,7 +1559,7 @@ raid5_write_default_reading(struct raid5_stripe_request *request)
 		num_blcks = raid_bdev->strip_size;
 	} else {
 		num_strips_to_r = raid_bdev->num_base_bdevs - (((es_idx + raid_bdev->num_base_bdevs) -
-				sts_idx) % raid_bdev->num_base_bdevs) - 2;
+				  sts_idx) % raid_bdev->num_base_bdevs) - 2;
 		start_idx = (after_es_idx + raid_io->base_bdev_io_submitted) % raid_bdev->num_base_bdevs;
 		ofs_blcks = raid5_ofs_blcks(bdev_io, raid_bdev, es_idx);
 		num_blcks = raid5_num_blcks(bdev_io, raid_bdev, es_idx);
@@ -1566,21 +1577,21 @@ raid5_write_default_reading(struct raid5_stripe_request *request)
 		base_ch = raid_ch->base_channel[idx];
 
 		ret = spdk_bdev_readv_blocks(base_info->desc, base_ch,
-											request->strip_buffs[idx], request->strip_buffs_cnts[idx],
-											ofs_blcks, num_blcks,
-											raid5_w_default_reading_cb,
-											request);
+					     request->strip_buffs[idx], request->strip_buffs_cnts[idx],
+					     ofs_blcks, num_blcks,
+					     raid5_w_default_reading_cb,
+					     request);
 
 		if (spdk_unlikely(ret != 0)) {
 			if (spdk_unlikely(ret == -ENOMEM)) {
 				raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-							base_ch, _raid5_write_default_reading, request);
+						    base_ch, _raid5_write_default_reading, request);
 				return;
 			}
 
 			base_bdev_io_not_submitted = num_strips_to_r - raid_io->base_bdev_io_submitted;
 			raid5_w_default_reading_complete_part(request, base_bdev_io_not_submitted,
-							SPDK_BDEV_IO_STATUS_FAILED);
+							      SPDK_BDEV_IO_STATUS_FAILED);
 			return;
 		}
 
@@ -1612,7 +1623,8 @@ raid5_w_broken_ps_complete_part(struct raid5_stripe_request *request, uint64_t c
 }
 
 static void
-raid5_w_broken_ps_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg) {
+raid5_w_broken_ps_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg)
+{
 	struct raid5_stripe_request *request = cb_arg;
 
 	spdk_bdev_free_io(bdev_io);
@@ -1659,20 +1671,20 @@ raid5_write_broken_parity_strip(struct raid5_stripe_request *request)
 		num_blcks = raid5_num_blcks(bdev_io, raid_bdev, idx);
 
 		ret = spdk_bdev_writev_blocks(base_info->desc, base_ch,
-											request->strip_buffs[idx], request->strip_buffs_cnts[idx],
-											ofs_blcks, num_blcks,
-											raid5_w_broken_ps_cb,
-											request);
+					      request->strip_buffs[idx], request->strip_buffs_cnts[idx],
+					      ofs_blcks, num_blcks,
+					      raid5_w_broken_ps_cb,
+					      request);
 
 		if (spdk_unlikely(ret != 0)) {
 			if (spdk_unlikely(ret == -ENOMEM)) {
 				raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-							base_ch, _raid5_write_broken_parity_strip, request);
+						    base_ch, _raid5_write_broken_parity_strip, request);
 				return;
 			}
 
 			base_bdev_io_not_submitted = ((es_idx + raid_bdev->num_base_bdevs) -
-					sts_idx) % raid_bdev->num_base_bdevs + 1 - raid_io->base_bdev_io_submitted;
+						      sts_idx) % raid_bdev->num_base_bdevs + 1 - raid_io->base_bdev_io_submitted;
 			raid5_w_broken_ps_complete_part(request, base_bdev_io_not_submitted,
 							SPDK_BDEV_IO_STATUS_FAILED);
 			return;
@@ -1684,7 +1696,7 @@ raid5_write_broken_parity_strip(struct raid5_stripe_request *request)
 
 static bool
 raid5_w_r_modify_w_writing_complete_part(struct raid5_stripe_request *request, uint64_t completed,
-				enum spdk_bdev_io_status status)
+		enum spdk_bdev_io_status status)
 {
 	struct raid_bdev_io *raid_io = request->raid_io;
 
@@ -1706,14 +1718,15 @@ raid5_w_r_modify_w_writing_complete_part(struct raid5_stripe_request *request, u
 }
 
 static void
-raid5_w_r_modify_w_writing_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg) {
+raid5_w_r_modify_w_writing_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg)
+{
 	struct raid5_stripe_request *request = cb_arg;
 
 	spdk_bdev_free_io(bdev_io);
 
 	raid5_w_r_modify_w_writing_complete_part(request, 1, success ?
-					SPDK_BDEV_IO_STATUS_SUCCESS :
-					SPDK_BDEV_IO_STATUS_FAILED);
+			SPDK_BDEV_IO_STATUS_SUCCESS :
+			SPDK_BDEV_IO_STATUS_FAILED);
 }
 
 static void raid5_write_r_modify_w_writing(struct raid5_stripe_request *request);
@@ -1756,22 +1769,22 @@ raid5_write_r_modify_w_writing(struct raid5_stripe_request *request)
 		}
 
 		ret = spdk_bdev_writev_blocks(base_info->desc, base_ch,
-										request->strip_buffs[ps_idx], request->strip_buffs_cnts[ps_idx],
-										ofs_blcks, num_blcks,
-										raid5_w_r_modify_w_writing_cb,
-										request);
+					      request->strip_buffs[ps_idx], request->strip_buffs_cnts[ps_idx],
+					      ofs_blcks, num_blcks,
+					      raid5_w_r_modify_w_writing_cb,
+					      request);
 
 		if (spdk_unlikely(ret != 0)) {
 			if (spdk_unlikely(ret == -ENOMEM)) {
 				raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-							base_ch, _raid5_write_r_modify_w_writing, request);
+						    base_ch, _raid5_write_r_modify_w_writing, request);
 				return;
 			}
 
 			base_bdev_io_not_submitted = ((es_idx + raid_bdev->num_base_bdevs) -
-						sts_idx) % raid_bdev->num_base_bdevs + 2 - raid_io->base_bdev_io_submitted;
+						      sts_idx) % raid_bdev->num_base_bdevs + 2 - raid_io->base_bdev_io_submitted;
 			raid5_w_r_modify_w_writing_complete_part(request, base_bdev_io_not_submitted,
-							SPDK_BDEV_IO_STATUS_FAILED);
+					SPDK_BDEV_IO_STATUS_FAILED);
 			return;
 		}
 		++raid_io->base_bdev_io_submitted;
@@ -1781,27 +1794,27 @@ raid5_write_r_modify_w_writing(struct raid5_stripe_request *request)
 	for (uint8_t idx = start_idx; idx != after_es_idx; idx = raid5_next_idx(idx, raid_bdev)) {
 		base_info = &raid_bdev->base_bdev_info[idx];
 		base_ch = raid_ch->base_channel[idx];
-		
+
 		ofs_blcks = raid5_ofs_blcks(bdev_io, raid_bdev, idx);
 		num_blcks = raid5_num_blcks(bdev_io, raid_bdev, idx);
 
 		ret = spdk_bdev_writev_blocks(base_info->desc, base_ch,
-											request->strip_buffs[idx], request->strip_buffs_cnts[idx],
-											ofs_blcks, num_blcks,
-											raid5_w_r_modify_w_writing_cb,
-											request);
+					      request->strip_buffs[idx], request->strip_buffs_cnts[idx],
+					      ofs_blcks, num_blcks,
+					      raid5_w_r_modify_w_writing_cb,
+					      request);
 
 		if (spdk_unlikely(ret != 0)) {
 			if (spdk_unlikely(ret == -ENOMEM)) {
 				raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-							base_ch, _raid5_write_r_modify_w_writing, request);
+						    base_ch, _raid5_write_r_modify_w_writing, request);
 				return;
 			}
 
 			base_bdev_io_not_submitted = ((es_idx + raid_bdev->num_base_bdevs) -
-						sts_idx) % raid_bdev->num_base_bdevs + 2 - raid_io->base_bdev_io_submitted;
+						      sts_idx) % raid_bdev->num_base_bdevs + 2 - raid_io->base_bdev_io_submitted;
 			raid5_w_r_modify_w_writing_complete_part(request, base_bdev_io_not_submitted,
-							SPDK_BDEV_IO_STATUS_FAILED);
+					SPDK_BDEV_IO_STATUS_FAILED);
 			return;
 		}
 
@@ -1811,7 +1824,7 @@ raid5_write_r_modify_w_writing(struct raid5_stripe_request *request)
 
 static bool
 raid5_w_r_modify_w_reading_complete_part(struct raid5_stripe_request *request, uint64_t completed,
-				enum spdk_bdev_io_status status)
+		enum spdk_bdev_io_status status)
 {
 	struct raid_bdev_io *raid_io = request->raid_io;
 
@@ -1826,7 +1839,7 @@ raid5_w_r_modify_w_reading_complete_part(struct raid5_stripe_request *request, u
 		struct raid_bdev 		*raid_bdev = raid_io->raid_bdev;
 		struct spdk_bdev_io		*bdev_io = spdk_bdev_io_from_ctx(raid_io);
 		uint64_t block_size_b8 = ((uint64_t)128 * raid_bdev->strip_size_kb) /
-					raid_bdev->strip_size;
+					 raid_bdev->strip_size;
 		uint8_t sts_idx = raid5_start_strip_idx(bdev_io, raid_bdev);
 		uint8_t es_idx = raid5_end_strip_idx(bdev_io, raid_bdev);
 		uint8_t after_es_idx = raid5_next_idx(es_idx, raid_bdev);
@@ -1843,12 +1856,12 @@ raid5_w_r_modify_w_reading_complete_part(struct raid5_stripe_request *request, u
 
 		for (uint8_t i = sts_idx; i != after_es_idx; i = raid5_next_idx(i, raid_bdev)) {
 			ofs_b8 = (raid5_ofs_blcks(bdev_io, raid_bdev, i) -
-					raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
+				  raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
 			num_b8 = raid5_num_blcks(bdev_io, raid_bdev, i) * block_size_b8;
 			raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-					request->strip_buffs_cnts[ps_idx], ofs_b8,
-					request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
-					num_b8);
+						 request->strip_buffs_cnts[ps_idx], ofs_b8,
+						 request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
+						 num_b8);
 		}
 
 		ret = raid5_write_r_modify_w_reset_strip_buffs(request);
@@ -1861,17 +1874,17 @@ raid5_w_r_modify_w_reading_complete_part(struct raid5_stripe_request *request, u
 
 		for (uint8_t i = sts_idx; i != after_es_idx; i = raid5_next_idx(i, raid_bdev)) {
 			ofs_b8 = (raid5_ofs_blcks(bdev_io, raid_bdev, i) -
-					raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
+				  raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
 			num_b8 = raid5_num_blcks(bdev_io, raid_bdev, i) * block_size_b8;
 			raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-					request->strip_buffs_cnts[ps_idx], ofs_b8,
-					request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
-					num_b8);
+						 request->strip_buffs_cnts[ps_idx], ofs_b8,
+						 request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
+						 num_b8);
 		}
 
 		raid_io->base_bdev_io_submitted = 0;
 		raid_io->base_bdev_io_remaining = (((es_idx + raid_bdev->num_base_bdevs) -
-					sts_idx) % raid_bdev->num_base_bdevs) + 2;
+						    sts_idx) % raid_bdev->num_base_bdevs) + 2;
 
 		raid5_write_r_modify_w_writing(request);
 
@@ -1882,14 +1895,15 @@ raid5_w_r_modify_w_reading_complete_part(struct raid5_stripe_request *request, u
 }
 
 static void
-raid5_w_r_modify_w_reading_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg) {
+raid5_w_r_modify_w_reading_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg)
+{
 	struct raid5_stripe_request *request = cb_arg;
 
 	spdk_bdev_free_io(bdev_io);
 
 	raid5_w_r_modify_w_reading_complete_part(request, 1, success ?
-					SPDK_BDEV_IO_STATUS_SUCCESS :
-					SPDK_BDEV_IO_STATUS_FAILED);
+			SPDK_BDEV_IO_STATUS_SUCCESS :
+			SPDK_BDEV_IO_STATUS_FAILED);
 }
 
 static void raid5_write_r_modify_w_reading(struct raid5_stripe_request *request);
@@ -1932,22 +1946,22 @@ raid5_write_r_modify_w_reading(struct raid5_stripe_request *request)
 		}
 
 		ret = spdk_bdev_readv_blocks(base_info->desc, base_ch,
-										request->strip_buffs[ps_idx], request->strip_buffs_cnts[ps_idx],
-										ofs_blcks, num_blcks,
-										raid5_w_r_modify_w_reading_cb,
-										request);
+					     request->strip_buffs[ps_idx], request->strip_buffs_cnts[ps_idx],
+					     ofs_blcks, num_blcks,
+					     raid5_w_r_modify_w_reading_cb,
+					     request);
 
 		if (spdk_unlikely(ret != 0)) {
 			if (spdk_unlikely(ret == -ENOMEM)) {
 				raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-							base_ch, _raid5_write_r_modify_w_reading, request);
+						    base_ch, _raid5_write_r_modify_w_reading, request);
 				return;
 			}
 
 			base_bdev_io_not_submitted = ((es_idx + raid_bdev->num_base_bdevs) -
-						sts_idx) % raid_bdev->num_base_bdevs + 2 - raid_io->base_bdev_io_submitted;
+						      sts_idx) % raid_bdev->num_base_bdevs + 2 - raid_io->base_bdev_io_submitted;
 			raid5_w_r_modify_w_reading_complete_part(request, base_bdev_io_not_submitted,
-							SPDK_BDEV_IO_STATUS_FAILED);
+					SPDK_BDEV_IO_STATUS_FAILED);
 			return;
 		}
 		++raid_io->base_bdev_io_submitted;
@@ -1957,27 +1971,27 @@ raid5_write_r_modify_w_reading(struct raid5_stripe_request *request)
 	for (uint8_t idx = start_idx; idx != after_es_idx; idx = raid5_next_idx(idx, raid_bdev)) {
 		base_info = &raid_bdev->base_bdev_info[idx];
 		base_ch = raid_ch->base_channel[idx];
-		
+
 		ofs_blcks = raid5_ofs_blcks(bdev_io, raid_bdev, idx);
 		num_blcks = raid5_num_blcks(bdev_io, raid_bdev, idx);
 
 		ret = spdk_bdev_readv_blocks(base_info->desc, base_ch,
-											request->strip_buffs[idx], request->strip_buffs_cnts[idx],
-											ofs_blcks, num_blcks,
-											raid5_w_r_modify_w_reading_cb,
-											request);
+					     request->strip_buffs[idx], request->strip_buffs_cnts[idx],
+					     ofs_blcks, num_blcks,
+					     raid5_w_r_modify_w_reading_cb,
+					     request);
 
 		if (spdk_unlikely(ret != 0)) {
 			if (spdk_unlikely(ret == -ENOMEM)) {
 				raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-							base_ch, _raid5_write_r_modify_w_reading, request);
+						    base_ch, _raid5_write_r_modify_w_reading, request);
 				return;
 			}
 
 			base_bdev_io_not_submitted = ((es_idx + raid_bdev->num_base_bdevs) -
-						sts_idx) % raid_bdev->num_base_bdevs + 2 - raid_io->base_bdev_io_submitted;
+						      sts_idx) % raid_bdev->num_base_bdevs + 2 - raid_io->base_bdev_io_submitted;
 			raid5_w_r_modify_w_reading_complete_part(request, base_bdev_io_not_submitted,
-							SPDK_BDEV_IO_STATUS_FAILED);
+					SPDK_BDEV_IO_STATUS_FAILED);
 			return;
 		}
 
@@ -1987,7 +2001,7 @@ raid5_write_r_modify_w_reading(struct raid5_stripe_request *request)
 
 static bool
 raid5_w_br_r_writing_complete_part(struct raid5_stripe_request *request, uint64_t completed,
-				enum spdk_bdev_io_status status)
+				   enum spdk_bdev_io_status status)
 {
 	struct raid_bdev_io *raid_io = request->raid_io;
 
@@ -2009,14 +2023,15 @@ raid5_w_br_r_writing_complete_part(struct raid5_stripe_request *request, uint64_
 }
 
 static void
-raid5_w_br_r_writing_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg) {
+raid5_w_br_r_writing_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg)
+{
 	struct raid5_stripe_request *request = cb_arg;
 
 	spdk_bdev_free_io(bdev_io);
 
 	raid5_w_br_r_writing_complete_part(request, 1, success ?
-					SPDK_BDEV_IO_STATUS_SUCCESS :
-					SPDK_BDEV_IO_STATUS_FAILED);
+					   SPDK_BDEV_IO_STATUS_SUCCESS :
+					   SPDK_BDEV_IO_STATUS_FAILED);
 }
 
 static void raid5_write_broken_req_writing(struct raid5_stripe_request *request);
@@ -2059,22 +2074,22 @@ raid5_write_broken_req_writing(struct raid5_stripe_request *request)
 		}
 
 		ret = spdk_bdev_writev_blocks(base_info->desc, base_ch,
-										request->strip_buffs[ps_idx], request->strip_buffs_cnts[ps_idx],
-										ofs_blcks, num_blcks,
-										raid5_w_br_r_writing_cb,
-										request);
+					      request->strip_buffs[ps_idx], request->strip_buffs_cnts[ps_idx],
+					      ofs_blcks, num_blcks,
+					      raid5_w_br_r_writing_cb,
+					      request);
 
 		if (spdk_unlikely(ret != 0)) {
 			if (spdk_unlikely(ret == -ENOMEM)) {
 				raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-							base_ch, _raid5_write_broken_req_writing, request);
+						    base_ch, _raid5_write_broken_req_writing, request);
 				return;
 			}
 
 			base_bdev_io_not_submitted = ((es_idx + raid_bdev->num_base_bdevs) -
-						sts_idx) % raid_bdev->num_base_bdevs + 1 - raid_io->base_bdev_io_submitted;
+						      sts_idx) % raid_bdev->num_base_bdevs + 1 - raid_io->base_bdev_io_submitted;
 			raid5_w_br_r_writing_complete_part(request, base_bdev_io_not_submitted,
-							SPDK_BDEV_IO_STATUS_FAILED);
+							   SPDK_BDEV_IO_STATUS_FAILED);
 			return;
 		}
 		++raid_io->base_bdev_io_submitted;
@@ -2090,27 +2105,27 @@ raid5_write_broken_req_writing(struct raid5_stripe_request *request)
 		}
 		base_info = &raid_bdev->base_bdev_info[idx];
 		base_ch = raid_ch->base_channel[idx];
-		
+
 		ofs_blcks = raid5_ofs_blcks(bdev_io, raid_bdev, idx);
 		num_blcks = raid5_num_blcks(bdev_io, raid_bdev, idx);
 
 		ret = spdk_bdev_writev_blocks(base_info->desc, base_ch,
-											request->strip_buffs[idx], request->strip_buffs_cnts[idx],
-											ofs_blcks, num_blcks,
-											raid5_w_br_r_writing_cb,
-											request);
+					      request->strip_buffs[idx], request->strip_buffs_cnts[idx],
+					      ofs_blcks, num_blcks,
+					      raid5_w_br_r_writing_cb,
+					      request);
 
 		if (spdk_unlikely(ret != 0)) {
 			if (spdk_unlikely(ret == -ENOMEM)) {
 				raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-							base_ch, _raid5_write_broken_req_writing, request);
+						    base_ch, _raid5_write_broken_req_writing, request);
 				return;
 			}
 
 			base_bdev_io_not_submitted = ((es_idx + raid_bdev->num_base_bdevs) -
-						sts_idx) % raid_bdev->num_base_bdevs + 1 - raid_io->base_bdev_io_submitted;
+						      sts_idx) % raid_bdev->num_base_bdevs + 1 - raid_io->base_bdev_io_submitted;
 			raid5_w_br_r_writing_complete_part(request, base_bdev_io_not_submitted,
-							SPDK_BDEV_IO_STATUS_FAILED);
+							   SPDK_BDEV_IO_STATUS_FAILED);
 			return;
 		}
 
@@ -2120,7 +2135,7 @@ raid5_write_broken_req_writing(struct raid5_stripe_request *request)
 
 static bool
 raid5_w_br_r_reading_complete_part(struct raid5_stripe_request *request, uint64_t completed,
-				enum spdk_bdev_io_status status)
+				   enum spdk_bdev_io_status status)
 {
 	struct raid_bdev_io *raid_io = request->raid_io;
 
@@ -2135,7 +2150,7 @@ raid5_w_br_r_reading_complete_part(struct raid5_stripe_request *request, uint64_
 		struct raid_bdev 		*raid_bdev = raid_io->raid_bdev;
 		struct spdk_bdev_io		*bdev_io = spdk_bdev_io_from_ctx(raid_io);
 		uint64_t block_size_b8 = ((uint64_t)128 * raid_bdev->strip_size_kb) /
-					raid_bdev->strip_size;
+					 raid_bdev->strip_size;
 		uint8_t sts_idx = raid5_start_strip_idx(bdev_io, raid_bdev);
 		uint8_t after_sts_idx = raid5_next_idx(sts_idx, raid_bdev);
 		uint8_t es_idx = raid5_end_strip_idx(bdev_io, raid_bdev);
@@ -2156,158 +2171,158 @@ raid5_w_br_r_reading_complete_part(struct raid5_stripe_request *request, uint64_
 			num_b8 = raid5_num_blcks(bdev_io, raid_bdev, sts_idx) * block_size_b8;
 			for (uint8_t i = after_sts_idx; i != ps_idx; i = raid5_next_idx(i, raid_bdev)) {
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], 0,
-						request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], 0,
+							 request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
+							 num_b8);
 			}
 			for (uint8_t i = after_ps_idx; i != sts_idx; i = raid5_next_idx(i, raid_bdev)) {
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], 0,
-						request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], 0,
+							 request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
+							 num_b8);
 			}
 		} else if (request->broken_strip_idx != sts_idx && request->broken_strip_idx != es_idx) {
 			num_b8 = raid_bdev->strip_size * block_size_b8;
 			for (uint8_t i = after_es_idx; i != ps_idx; i = raid5_next_idx(i, raid_bdev)) {
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], 0,
-						request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], 0,
+							 request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
+							 num_b8);
 			}
 			for (uint8_t i = after_ps_idx; i != sts_idx; i = raid5_next_idx(i, raid_bdev)) {
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], 0,
-						request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], 0,
+							 request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
+							 num_b8);
 			}
 			num_b8 = (raid5_ofs_blcks(bdev_io, raid_bdev, sts_idx) -
-					raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
+				  raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
 			raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-					request->strip_buffs_cnts[ps_idx], 0,
-					request->strip_buffs[sts_idx], request->strip_buffs_cnts[sts_idx], 0,
-					num_b8);
+						 request->strip_buffs_cnts[ps_idx], 0,
+						 request->strip_buffs[sts_idx], request->strip_buffs_cnts[sts_idx], 0,
+						 num_b8);
 			num_b8 = (raid_bdev->strip_size - raid5_num_blcks(bdev_io, raid_bdev, es_idx)) *
-						block_size_b8;
+				 block_size_b8;
 			ofs_b8 = raid5_num_blcks(bdev_io, raid_bdev, es_idx) * block_size_b8;
 			raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-					request->strip_buffs_cnts[ps_idx], ofs_b8,
-					request->strip_buffs[es_idx], request->strip_buffs_cnts[es_idx], ofs_b8,
-					num_b8);
+						 request->strip_buffs_cnts[ps_idx], ofs_b8,
+						 request->strip_buffs[es_idx], request->strip_buffs_cnts[es_idx], ofs_b8,
+						 num_b8);
 		} else if (request->broken_strip_idx == sts_idx) {
 			ofs_b8 = (raid5_ofs_blcks(bdev_io, raid_bdev, sts_idx) -
-						raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
+				  raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
 			num_b8 = raid5_num_blcks(bdev_io, raid_bdev, sts_idx) * block_size_b8;
 			for (uint8_t i = ps_idx; i != sts_idx; i = raid5_next_idx(i, raid_bdev)) {
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
+							 num_b8);
 			}
 			for (uint8_t i = after_es_idx; i != ps_idx; i = raid5_next_idx(i, raid_bdev)) {
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
+							 num_b8);
 			}
 			ofs_b8 = 0;
 			num_b8 = (raid_bdev->strip_size -
-					raid5_num_blcks(bdev_io, raid_bdev, sts_idx)) * block_size_b8;
+				  raid5_num_blcks(bdev_io, raid_bdev, sts_idx)) * block_size_b8;
 			for (uint8_t i = after_sts_idx; i != es_idx; i = raid5_next_idx(i, raid_bdev)) {
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
+							 num_b8);
 			}
 			if (raid5_num_blcks(bdev_io, raid_bdev, es_idx) < raid_bdev->strip_size -
-					raid5_num_blcks(bdev_io, raid_bdev, sts_idx)) {
+			    raid5_num_blcks(bdev_io, raid_bdev, sts_idx)) {
 				ofs_b8 = 0;
 				num_b8 = raid5_num_blcks(bdev_io, raid_bdev, es_idx) * block_size_b8;
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[es_idx], request->strip_buffs_cnts[es_idx], ofs_b8,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[es_idx], request->strip_buffs_cnts[es_idx], ofs_b8,
+							 num_b8);
 
 				ofs_b8 = (raid5_ofs_blcks(bdev_io, raid_bdev, sts_idx) -
-						raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
+					  raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
 				num_b8 = raid5_num_blcks(bdev_io, raid_bdev, sts_idx) * block_size_b8;
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[es_idx], request->strip_buffs_cnts[es_idx], ofs_b8,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[es_idx], request->strip_buffs_cnts[es_idx], ofs_b8,
+							 num_b8);
 			} else {
 				ofs_b8 = 0;
 				num_b8 = (raid5_ofs_blcks(bdev_io, raid_bdev, sts_idx) -
-						raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
+					  raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[es_idx], request->strip_buffs_cnts[es_idx], ofs_b8,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[es_idx], request->strip_buffs_cnts[es_idx], ofs_b8,
+							 num_b8);
 
 				ofs_b8 = raid5_num_blcks(bdev_io, raid_bdev, es_idx) * block_size_b8;
 				num_b8 = (raid_bdev->strip_size - raid5_num_blcks(bdev_io, raid_bdev, es_idx)) *
-						block_size_b8;
+					 block_size_b8;
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[es_idx], request->strip_buffs_cnts[es_idx], ofs_b8,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[es_idx], request->strip_buffs_cnts[es_idx], ofs_b8,
+							 num_b8);
 			}
 		} else {
 			ofs_b8 = 0;
 			num_b8 = raid5_num_blcks(bdev_io, raid_bdev, es_idx) * block_size_b8;
 			for (uint8_t i = ps_idx; i != sts_idx; i = raid5_next_idx(i, raid_bdev)) {
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
+							 num_b8);
 			}
 			for (uint8_t i = after_es_idx; i != ps_idx; i = raid5_next_idx(i, raid_bdev)) {
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
+							 num_b8);
 			}
 			ofs_b8 = raid5_num_blcks(bdev_io, raid_bdev, es_idx) * block_size_b8;
 			num_b8 = (raid_bdev->strip_size -
-					raid5_num_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
+				  raid5_num_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
 			for (uint8_t i = after_sts_idx; i != es_idx; i = raid5_next_idx(i, raid_bdev)) {
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[i], request->strip_buffs_cnts[i], ofs_b8,
+							 num_b8);
 			}
 
-			if (raid5_num_blcks(bdev_io, raid_bdev, sts_idx) < raid_bdev->strip_size - 
-					raid5_num_blcks(bdev_io, raid_bdev, es_idx)) {
+			if (raid5_num_blcks(bdev_io, raid_bdev, sts_idx) < raid_bdev->strip_size -
+			    raid5_num_blcks(bdev_io, raid_bdev, es_idx)) {
 				ofs_b8 = (raid5_ofs_blcks(bdev_io, raid_bdev, sts_idx) -
-						raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
+					  raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
 				num_b8 = raid5_num_blcks(bdev_io, raid_bdev, sts_idx) * block_size_b8;
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[sts_idx], request->strip_buffs_cnts[sts_idx], ofs_b8,
-						num_b8);
-				
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[sts_idx], request->strip_buffs_cnts[sts_idx], ofs_b8,
+							 num_b8);
+
 				ofs_b8 = 0;
 				num_b8 = raid5_num_blcks(bdev_io, raid_bdev, es_idx) * block_size_b8;
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[sts_idx], request->strip_buffs_cnts[sts_idx], ofs_b8,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[sts_idx], request->strip_buffs_cnts[sts_idx], ofs_b8,
+							 num_b8);
 			} else {
 				ofs_b8 = raid5_num_blcks(bdev_io, raid_bdev, es_idx) * block_size_b8;
 				num_b8 = (raid_bdev->strip_size - raid5_num_blcks(bdev_io, raid_bdev, es_idx)) *
-						block_size_b8;
+					 block_size_b8;
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[sts_idx], request->strip_buffs_cnts[sts_idx], ofs_b8,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[sts_idx], request->strip_buffs_cnts[sts_idx], ofs_b8,
+							 num_b8);
 
 				ofs_b8 = 0;
 				num_b8 = (raid_bdev->strip_size - raid5_num_blcks(bdev_io, raid_bdev, sts_idx))
-						* block_size_b8;
+					 * block_size_b8;
 				raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-						request->strip_buffs_cnts[ps_idx], ofs_b8,
-						request->strip_buffs[sts_idx], request->strip_buffs_cnts[sts_idx], ofs_b8,
-						num_b8);
+							 request->strip_buffs_cnts[ps_idx], ofs_b8,
+							 request->strip_buffs[sts_idx], request->strip_buffs_cnts[sts_idx], ofs_b8,
+							 num_b8);
 			}
 		}
 
@@ -2321,17 +2336,17 @@ raid5_w_br_r_reading_complete_part(struct raid5_stripe_request *request, uint64_
 
 		for (uint8_t i = sts_idx; i != after_es_idx; i = raid5_next_idx(i, raid_bdev)) {
 			ofs_b8 = (raid5_ofs_blcks(bdev_io, raid_bdev, i) -
-					raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
+				  raid5_ofs_blcks(bdev_io, raid_bdev, es_idx)) * block_size_b8;
 			num_b8 = raid5_num_blcks(bdev_io, raid_bdev, i) * block_size_b8;
 			raid5_xor_iovs_with_iovs(request->strip_buffs[ps_idx],
-					request->strip_buffs_cnts[ps_idx], ofs_b8,
-					request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
-					num_b8);
+						 request->strip_buffs_cnts[ps_idx], ofs_b8,
+						 request->strip_buffs[i], request->strip_buffs_cnts[i], 0,
+						 num_b8);
 		}
 
 		raid_io->base_bdev_io_submitted = 0;
 		raid_io->base_bdev_io_remaining = (((es_idx + raid_bdev->num_base_bdevs) -
-					sts_idx) % raid_bdev->num_base_bdevs) + 1;
+						    sts_idx) % raid_bdev->num_base_bdevs) + 1;
 
 		raid5_write_broken_req_writing(request);
 
@@ -2342,14 +2357,15 @@ raid5_w_br_r_reading_complete_part(struct raid5_stripe_request *request, uint64_
 }
 
 static void
-raid5_w_br_r_reading_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg) {
+raid5_w_br_r_reading_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg)
+{
 	struct raid5_stripe_request *request = cb_arg;
 
 	spdk_bdev_free_io(bdev_io);
 
 	raid5_w_br_r_reading_complete_part(request, 1, success ?
-					SPDK_BDEV_IO_STATUS_SUCCESS :
-					SPDK_BDEV_IO_STATUS_FAILED);
+					   SPDK_BDEV_IO_STATUS_SUCCESS :
+					   SPDK_BDEV_IO_STATUS_FAILED);
 }
 
 static void raid5_write_broken_req_reading(struct raid5_stripe_request *request);
@@ -2399,21 +2415,21 @@ raid5_write_broken_req_reading(struct raid5_stripe_request *request)
 			base_ch = raid_ch->base_channel[idx];
 
 			ret = spdk_bdev_readv_blocks(base_info->desc, base_ch,
-												request->strip_buffs[idx], request->strip_buffs_cnts[idx],
-												ofs_blcks, num_blcks,
-												raid5_w_br_r_reading_cb,
-												request);
+						     request->strip_buffs[idx], request->strip_buffs_cnts[idx],
+						     ofs_blcks, num_blcks,
+						     raid5_w_br_r_reading_cb,
+						     request);
 
 			if (spdk_unlikely(ret != 0)) {
 				if (spdk_unlikely(ret == -ENOMEM)) {
 					raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-								base_ch, _raid5_write_broken_req_reading, request);
+							    base_ch, _raid5_write_broken_req_reading, request);
 					return;
 				}
 
 				base_bdev_io_not_submitted = num_strips_to_r - raid_io->base_bdev_io_submitted;
 				raid5_w_br_r_reading_complete_part(request, base_bdev_io_not_submitted,
-								SPDK_BDEV_IO_STATUS_FAILED);
+								   SPDK_BDEV_IO_STATUS_FAILED);
 				return;
 			}
 
@@ -2421,7 +2437,7 @@ raid5_write_broken_req_reading(struct raid5_stripe_request *request)
 		}
 	} else if (request->broken_strip_idx != sts_idx && request->broken_strip_idx != es_idx) {
 		num_strips_to_r = raid_bdev->num_base_bdevs - (((es_idx + raid_bdev->num_base_bdevs) -
-					sts_idx) % raid_bdev->num_base_bdevs);
+				  sts_idx) % raid_bdev->num_base_bdevs);
 		start_idx = (es_idx + raid_io->base_bdev_io_submitted) % raid_bdev->num_base_bdevs;
 		if (start_idx == ps_idx) {
 			start_idx = raid5_next_idx(start_idx, raid_bdev);
@@ -2437,21 +2453,21 @@ raid5_write_broken_req_reading(struct raid5_stripe_request *request)
 			base_ch = raid_ch->base_channel[idx];
 
 			ret = spdk_bdev_readv_blocks(base_info->desc, base_ch,
-												request->strip_buffs[idx], request->strip_buffs_cnts[idx],
-												ofs_blcks, num_blcks,
-												raid5_w_br_r_reading_cb,
-												request);
+						     request->strip_buffs[idx], request->strip_buffs_cnts[idx],
+						     ofs_blcks, num_blcks,
+						     raid5_w_br_r_reading_cb,
+						     request);
 
 			if (spdk_unlikely(ret != 0)) {
 				if (spdk_unlikely(ret == -ENOMEM)) {
 					raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-								base_ch, _raid5_write_broken_req_reading, request);
+							    base_ch, _raid5_write_broken_req_reading, request);
 					return;
 				}
 
 				base_bdev_io_not_submitted = num_strips_to_r - raid_io->base_bdev_io_submitted;
 				raid5_w_br_r_reading_complete_part(request, base_bdev_io_not_submitted,
-								SPDK_BDEV_IO_STATUS_FAILED);
+								   SPDK_BDEV_IO_STATUS_FAILED);
 				return;
 			}
 
@@ -2468,21 +2484,21 @@ raid5_write_broken_req_reading(struct raid5_stripe_request *request)
 			base_ch = raid_ch->base_channel[idx];
 
 			ret = spdk_bdev_readv_blocks(base_info->desc, base_ch,
-												request->strip_buffs[idx], request->strip_buffs_cnts[idx],
-												ofs_blcks, num_blcks,
-												raid5_w_br_r_reading_cb,
-												request);
+						     request->strip_buffs[idx], request->strip_buffs_cnts[idx],
+						     ofs_blcks, num_blcks,
+						     raid5_w_br_r_reading_cb,
+						     request);
 
 			if (spdk_unlikely(ret != 0)) {
 				if (spdk_unlikely(ret == -ENOMEM)) {
 					raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-								base_ch, _raid5_write_broken_req_reading, request);
+							    base_ch, _raid5_write_broken_req_reading, request);
 					return;
 				}
 
 				base_bdev_io_not_submitted = num_strips_to_r - raid_io->base_bdev_io_submitted;
 				raid5_w_br_r_reading_complete_part(request, base_bdev_io_not_submitted,
-								SPDK_BDEV_IO_STATUS_FAILED);
+								   SPDK_BDEV_IO_STATUS_FAILED);
 				return;
 			}
 
@@ -2499,21 +2515,21 @@ raid5_write_broken_req_reading(struct raid5_stripe_request *request)
 			base_ch = raid_ch->base_channel[idx];
 
 			ret = spdk_bdev_readv_blocks(base_info->desc, base_ch,
-												request->strip_buffs[idx], request->strip_buffs_cnts[idx],
-												ofs_blcks, num_blcks,
-												raid5_w_br_r_reading_cb,
-												request);
+						     request->strip_buffs[idx], request->strip_buffs_cnts[idx],
+						     ofs_blcks, num_blcks,
+						     raid5_w_br_r_reading_cb,
+						     request);
 
 			if (spdk_unlikely(ret != 0)) {
 				if (spdk_unlikely(ret == -ENOMEM)) {
 					raid5_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
-								base_ch, _raid5_write_broken_req_reading, request);
+							    base_ch, _raid5_write_broken_req_reading, request);
 					return;
 				}
 
 				base_bdev_io_not_submitted = num_strips_to_r - raid_io->base_bdev_io_submitted;
 				raid5_w_br_r_reading_complete_part(request, base_bdev_io_not_submitted,
-								SPDK_BDEV_IO_STATUS_FAILED);
+								   SPDK_BDEV_IO_STATUS_FAILED);
 				return;
 			}
 
@@ -2538,7 +2554,7 @@ raid5_submit_write_request(struct raid5_stripe_request *request)
 
 	for (uint8_t idx = 0; idx < raid_bdev->num_base_bdevs; ++idx) {
 		base_ch = raid_ch->base_channel[idx];
-		
+
 		if (base_ch == NULL) {
 			if (request->broken_strip_idx == raid_bdev->num_base_bdevs) {
 				request->broken_strip_idx = idx;
@@ -2551,9 +2567,9 @@ raid5_submit_write_request(struct raid5_stripe_request *request)
 			}
 		}
 	}
-	
+
 	if (request->broken_strip_idx == raid_bdev->num_base_bdevs &&
-				r5_info->write_type == DEFAULT) {
+	    r5_info->write_type == DEFAULT) {
 		// default
 
 		ret = raid5_write_default_set_strip_buffs(request);
@@ -2565,10 +2581,11 @@ raid5_submit_write_request(struct raid5_stripe_request *request)
 		}
 
 		raid_io->base_bdev_io_submitted = 0;
-		raid_io->base_bdev_io_remaining = raid_bdev->num_base_bdevs - (((es_idx + raid_bdev->num_base_bdevs) -
-				sts_idx) % raid_bdev->num_base_bdevs) - 2;
+		raid_io->base_bdev_io_remaining = raid_bdev->num_base_bdevs - (((es_idx + raid_bdev->num_base_bdevs)
+						  -
+						  sts_idx) % raid_bdev->num_base_bdevs) - 2;
 		if (sts_idx != es_idx) {
-			raid_io->base_bdev_io_remaining +=2;
+			raid_io->base_bdev_io_remaining += 2;
 		}
 		raid5_write_default_reading(request);
 	} else if (request->broken_strip_idx == ps_idx) {
@@ -2584,10 +2601,10 @@ raid5_submit_write_request(struct raid5_stripe_request *request)
 
 		raid_io->base_bdev_io_submitted = 0;
 		raid_io->base_bdev_io_remaining = ((es_idx + raid_bdev->num_base_bdevs) -
-				sts_idx) % raid_bdev->num_base_bdevs + 1;
+						   sts_idx) % raid_bdev->num_base_bdevs + 1;
 		raid5_write_broken_parity_strip(request);
 	} else if (request->broken_strip_idx == raid_bdev->num_base_bdevs ||
-					!raid5_is_req_strip(sts_idx, es_idx,request->broken_strip_idx)) {
+		   !raid5_is_req_strip(sts_idx, es_idx, request->broken_strip_idx)) {
 		// read-modify-write
 
 		ret = raid5_write_r_modify_w_set_strip_buffs(request);
@@ -2600,7 +2617,7 @@ raid5_submit_write_request(struct raid5_stripe_request *request)
 
 		raid_io->base_bdev_io_submitted = 0;
 		raid_io->base_bdev_io_remaining = ((es_idx + raid_bdev->num_base_bdevs) -
-				sts_idx) % raid_bdev->num_base_bdevs + 2;
+						   sts_idx) % raid_bdev->num_base_bdevs + 2;
 		raid5_write_r_modify_w_reading(request);
 	} else {
 		// broken req strip
@@ -2617,8 +2634,9 @@ raid5_submit_write_request(struct raid5_stripe_request *request)
 		if (sts_idx == es_idx) {
 			raid_io->base_bdev_io_remaining = raid_bdev->num_base_bdevs - 2;
 		} else if (request->broken_strip_idx != sts_idx && request->broken_strip_idx != es_idx) {
-			raid_io->base_bdev_io_remaining = raid_bdev->num_base_bdevs - (((es_idx + raid_bdev->num_base_bdevs) -
-							sts_idx) % raid_bdev->num_base_bdevs);
+			raid_io->base_bdev_io_remaining = raid_bdev->num_base_bdevs - (((es_idx + raid_bdev->num_base_bdevs)
+							  -
+							  sts_idx) % raid_bdev->num_base_bdevs);
 		} else {
 			raid_io->base_bdev_io_remaining = raid_bdev->num_base_bdevs - 1;
 		}
@@ -2675,7 +2693,7 @@ raid5_submit_rw_request(struct raid_bdev_io *raid_io)
 
 static bool
 raid5_wz_req_complete_part_final(struct raid_bdev_io *raid_io, uint64_t completed,
-				enum spdk_bdev_io_status status)
+				 enum spdk_bdev_io_status status)
 {
 	assert(raid_io->base_bdev_io_remaining >= completed);
 	raid_io->base_bdev_io_remaining -= completed;
@@ -2705,18 +2723,18 @@ raid5_wz_req_complete_part_final(struct raid_bdev_io *raid_io, uint64_t complete
 }
 
 static void
-raid5_wz_req_complete_part(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg) {
+raid5_wz_req_complete_part(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg)
+{
 	struct raid_bdev_io *raid_io = cb_arg;
-	
+
 	spdk_bdev_free_io(bdev_io);
 
 	raid5_wz_req_complete_part_final(raid_io, 1, success ?
-					SPDK_BDEV_IO_STATUS_SUCCESS :
-					SPDK_BDEV_IO_STATUS_FAILED);
+					 SPDK_BDEV_IO_STATUS_SUCCESS :
+					 SPDK_BDEV_IO_STATUS_FAILED);
 }
 
-static int
-raid5_submit_write_zeroes_request(struct raid_bdev_io *raid_io);
+static int raid5_submit_write_zeroes_request(struct raid_bdev_io *raid_io);
 
 static void
 _raid5_submit_write_zeroes_request(void *_raid_io)
@@ -2727,7 +2745,8 @@ _raid5_submit_write_zeroes_request(void *_raid_io)
 }
 
 static int
-raid5_submit_write_zeroes_request(struct raid_bdev_io *raid_io) {
+raid5_submit_write_zeroes_request(struct raid_bdev_io *raid_io)
+{
 	struct raid_bdev *raid_bdev = raid_io->raid_bdev;
 	struct raid_base_bdev_info *base_info;
 	struct spdk_io_channel *base_ch;
@@ -2748,10 +2767,10 @@ raid5_submit_write_zeroes_request(struct raid_bdev_io *raid_io) {
 			raid5_wz_req_complete_part_final(raid_io, 1, SPDK_BDEV_IO_STATUS_SUCCESS);
 			continue;
 		}
-		
+
 		ret = spdk_bdev_write_zeroes_blocks(base_info->desc, base_ch,
-							0, num_blocks,
-							raid5_wz_req_complete_part, raid_io);
+						    0, num_blocks,
+						    raid5_wz_req_complete_part, raid_io);
 		if (spdk_unlikely(ret != 0)) {
 			if (spdk_unlikely(ret == -ENOMEM)) {
 				raid_bdev_queue_io_wait(raid_io, spdk_bdev_desc_get_bdev(base_info->desc),
@@ -2760,10 +2779,10 @@ raid5_submit_write_zeroes_request(struct raid_bdev_io *raid_io) {
 			}
 
 			base_bdev_io_not_submitted = raid_bdev->num_base_bdevs -
-							raid_io->base_bdev_io_submitted;
+						     raid_io->base_bdev_io_submitted;
 			raid5_wz_req_complete_part_final(raid_io,
-							base_bdev_io_not_submitted,
-							SPDK_BDEV_IO_STATUS_FAILED);
+							 base_bdev_io_not_submitted,
+							 SPDK_BDEV_IO_STATUS_FAILED);
 			return 0;
 		}
 
@@ -2792,19 +2811,19 @@ raid5_set_write_type(struct raid_bdev *raid_bdev)
 		if (desc != NULL) {
 			base_bdev = spdk_bdev_desc_get_bdev(desc);
 			if (!base_bdev->fn_table->io_type_supported(base_bdev->ctxt,
-								SPDK_BDEV_IO_TYPE_WRITE_ZEROES)) {
+					SPDK_BDEV_IO_TYPE_WRITE_ZEROES)) {
 				r5_info->write_type = DEFAULT;
 				return;
 			}
 		}
 	}
-	
+
 	raid_io = calloc(1, sizeof(struct raid_bdev_io));
 	if (raid_io == NULL) {
 		r5_info->write_type = DEFAULT;
 		return;
 	}
-	
+
 	raid_io->raid_bdev = raid_bdev;
 	raid_io->base_bdev_io_remaining = 0;
 	raid_io->base_bdev_io_submitted = 0;
@@ -2850,7 +2869,7 @@ raid5_calculate_blockcnt(struct raid_bdev *raid_bdev)
 	stripe_blockcnt = raid_bdev->strip_size * (raid_bdev->num_base_bdevs - 1);
 
 	SPDK_DEBUGLOG(bdev_raid5, "min blockcount %" PRIu64 ",  numbasedev %u, strip size shift %u\n",
-				min_blockcnt, raid_bdev->num_base_bdevs, raid_bdev->strip_size_shift);
+		      min_blockcnt, raid_bdev->num_base_bdevs, raid_bdev->strip_size_shift);
 
 	return total_stripes * stripe_blockcnt;
 }
@@ -2888,9 +2907,9 @@ raid5_resize(struct raid_bdev *raid_bdev)
 	}
 
 	SPDK_NOTICELOG("raid5 '%s': min blockcount was changed from %" PRIu64 " to %" PRIu64 "\n",
-					raid_bdev->bdev.name,
-					raid_bdev->bdev.blockcnt,
-					blockcnt);
+		       raid_bdev->bdev.name,
+		       raid_bdev->bdev.blockcnt,
+		       blockcnt);
 
 	rc = spdk_bdev_notify_blockcnt_change(&raid_bdev->bdev, blockcnt);
 	if (rc != 0) {

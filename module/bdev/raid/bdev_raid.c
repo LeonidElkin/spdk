@@ -936,7 +936,8 @@ raid_bdev_init(void)
 }
 
 static int
-raid_merge_info_alloc(uint8_t num_parity_strip, uint8_t num_base_bdevs, struct raid_bdev_merge_info **info)
+raid_merge_info_alloc(uint8_t num_parity_strip, uint8_t num_base_bdevs,
+		      struct raid_bdev_merge_info **info)
 {
 	struct raid_bdev_merge_info *_info = calloc(1, sizeof(struct raid_bdev_merge_info));
 
@@ -1042,18 +1043,18 @@ raid_bdev_create(const char *name, uint32_t strip_size, uint8_t num_base_bdevs,
 
 	int ret;
 
-	switch(level) {
-		case RAID1:
-			ret = raid_merge_info_alloc(1, num_base_bdevs, &(raid_bdev->merge_info));
-			break;
-		case RAID0:
-			ret = raid_merge_info_alloc(0, num_base_bdevs, &(raid_bdev->merge_info));
-			break;
-		default:
-			raid_bdev->merge_info = NULL;
+	switch (level) {
+	case RAID1:
+		ret = raid_merge_info_alloc(1, num_base_bdevs, &(raid_bdev->merge_info));
+		break;
+	case RAID0:
+		ret = raid_merge_info_alloc(0, num_base_bdevs, &(raid_bdev->merge_info));
+		break;
+	default:
+		raid_bdev->merge_info = NULL;
 	}
 
-	if (ret) return ret;
+	if (ret) { return ret; }
 
 	raid_bdev->module = module;
 	raid_bdev->num_base_bdevs = num_base_bdevs;

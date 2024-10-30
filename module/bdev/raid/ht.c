@@ -9,8 +9,7 @@ ht_create(void)
 {
 	ht *table = (ht *)malloc(sizeof(ht));
 
-	if (table == NULL)
-	{
+	if (table == NULL) {
 		return NULL;
 	}
 
@@ -18,8 +17,7 @@ ht_create(void)
 	table->capacity = INITIAL_CAPACITY;
 	table->entries = (ht_entry *)calloc(table->capacity, sizeof(ht_entry));
 
-	if (table->entries == NULL)
-	{
+	if (table->entries == NULL) {
 		free(table);
 		return NULL;
 	}
@@ -30,8 +28,7 @@ ht_create(void)
 void
 ht_destroy(ht *table)
 {
-	for (size_t i = 0; i < table->capacity; i++)
-	{
+	for (size_t i = 0; i < table->capacity; i++) {
 		free((void *)table->entries[i].key);
 	}
 
@@ -44,8 +41,7 @@ hash_key(const char *key)
 {
 	uint64_t hash = FNV_OFFSET;
 
-	for (const char *p = key; *p; p++)
-	{
+	for (const char *p = key; *p; p++) {
 		hash ^= (uint64_t)(unsigned char)(*p);
 		hash *= FNV_PRIME;
 	}
@@ -59,15 +55,14 @@ ht_get(ht *table, const char *key)
 	uint64_t hash = hash_key(key);
 	size_t index = (size_t)(hash & (uint64_t)(table->capacity - 1));
 
-	while (table->entries[index].key != NULL)
-	{
+	while (table->entries[index].key != NULL) {
 
-		if (strcmp(key, table->entries[index].key) == 0)
+		if (strcmp(key, table->entries[index].key) == 0) {
 			return table->entries[index].value;
+		}
 
 		index++;
-		if (index >= table->capacity)
-		{
+		if (index >= table->capacity) {
 			index = 0;
 		}
 	}
@@ -81,27 +76,24 @@ ht_set_entry(ht_entry *entries, size_t capacity, const char *key, void *value, s
 	uint64_t hash = hash_key(key);
 	size_t index = (size_t)(hash & (uint64_t)(capacity - 1));
 
-	while (entries[index].key != NULL)
-	{
+	while (entries[index].key != NULL) {
 
-		if (strcmp(key, entries[index].key) == 0)
-		{
+		if (strcmp(key, entries[index].key) == 0) {
 			entries[index].value = value;
 			return entries[index].key;
 		}
 
 		index++;
-		if (index >= capacity)
-		{
+		if (index >= capacity) {
 			index = 0;
 		}
 	}
 
-	if (plength != NULL)
-	{
+	if (plength != NULL) {
 		key = strdup(key);
-		if (key == NULL)
+		if (key == NULL) {
 			return NULL;
+		}
 		(*plength)++;
 	}
 
@@ -114,22 +106,20 @@ static bool
 ht_expand(ht *table)
 {
 	size_t new_capacity = table->capacity * 2;
-	if (new_capacity < table->capacity)
-	{
+	if (new_capacity < table->capacity) {
 		return false;
 	}
 
 	ht_entry *new_entries = (ht_entry *)calloc(new_capacity, sizeof(ht_entry));
-	if (new_entries == NULL)
-	{
+	if (new_entries == NULL) {
 		return false;
 	}
 
-	for (size_t i = 0; i < table->capacity; i++)
-	{
+	for (size_t i = 0; i < table->capacity; i++) {
 		ht_entry entry = table->entries[i];
-		if (entry.key != NULL)
+		if (entry.key != NULL) {
 			ht_set_entry(new_entries, new_capacity, entry.key, entry.value, NULL);
+		}
 	}
 
 	free(table->entries);
@@ -142,15 +132,14 @@ const char *
 ht_set(ht *table, const char *key, void *value)
 {
 	assert(value != NULL);
-	if (value == NULL)
-	{
+	if (value == NULL) {
 		return NULL;
 	}
 
-	if (table->length >= table->capacity / 2)
-	{
-		if (!ht_expand(table))
+	if (table->length >= table->capacity / 2) {
+		if (!ht_expand(table)) {
 			return NULL;
+		}
 	}
 
 	return ht_set_entry(table->entries, table->capacity, key, value, &table->length);
@@ -162,11 +151,9 @@ ht_remove(ht *table, const char *key)
 	uint64_t hash = hash_key(key);
 	size_t index = (size_t)(hash & (uint64_t)(table->capacity - 1));
 
-	while (table->entries[index].key != NULL)
-	{
+	while (table->entries[index].key != NULL) {
 
-		if (strcmp(key, table->entries[index].key) == 0)
-		{
+		if (strcmp(key, table->entries[index].key) == 0) {
 			table->entries[index].value = NULL;
 			table->length--;
 			return table->entries[index].value;
@@ -174,8 +161,9 @@ ht_remove(ht *table, const char *key)
 
 		index++;
 
-		if (index >= table->capacity)
+		if (index >= table->capacity) {
 			index = 0;
+		}
 	}
 
 	return NULL;
@@ -200,14 +188,12 @@ bool
 ht_next(hti *it)
 {
 	ht *table = it->_table;
-	while (it->_index < table->capacity)
-	{
+	while (it->_index < table->capacity) {
 
 		size_t i = it->_index;
 		it->_index++;
 
-		if (table->entries[i].key != NULL)
-		{
+		if (table->entries[i].key != NULL) {
 			ht_entry entry = table->entries[i];
 			it->key = entry.key;
 			it->value = entry.value;
