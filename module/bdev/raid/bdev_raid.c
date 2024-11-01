@@ -164,7 +164,7 @@ raid_bdev_destroy_cb(void *io_device, void *ctx_buf)
 static void
 raid_free_merge_info(struct raid_bdev *raid_bdev)
 {
-	raid_clear_ht(raid_bdev);
+	if (raid_bdev->merge_info) { raid_clear_ht(raid_bdev); }
 	free(raid_bdev->merge_info);
 }
 
@@ -936,21 +936,40 @@ raid_bdev_init(void)
 }
 
 static int
-raid_merge_info_alloc(uint8_t num_parity_strip, uint8_t num_base_bdevs,
-		      struct raid_bdev_merge_info **info)
+raid_merge_info_alloc(struct raid_bdev *raid_bdev)
 {
-	struct raid_bdev_merge_info *_info = calloc(1, sizeof(struct raid_bdev_merge_info));
+	uint8_t num_parity_strips;
 
-	if (!_info) {
+	switch (raid_bdev->level) {
+	case RAID1:
+		if (raid_bdev->num_base_bdevs % 2 == 1) {
+			SPDK_WARNLOG("Merging requests is not supported for RAID1 with an odd number of base bdevs\n");
+			raid_bdev->merge_info = NULL;
+			return 0;
+		} else {
+			num_parity_strips = raid_bdev->num_base_bdevs / 2;
+		}
+		break;
+	case RAID0:
+		num_parity_strips = 0;
+		break;
+	case RAID5:
+		num_parity_strips = 1;
+		break;
+	default:
+		raid_bdev->merge_info = NULL;
+		return 0;
+	}
+
+	raid_bdev->merge_info = calloc(1, sizeof(struct raid_bdev_merge_info));
+
+	if (!raid_bdev->merge_info) {
 		SPDK_ERRLOG("Unable to allocate memory for merge info\n");
 		return -ENOMEM;
 	}
 
-	_info->merge_ht = ht_create();
-	_info->num_parity_strip = num_parity_strip;
-	_info->max_tree_size = num_base_bdevs - num_parity_strip;
-
-	*info = _info;
+	raid_bdev->merge_info->merge_ht = ht_create();
+	raid_bdev->merge_info->max_tree_size = raid_bdev->num_base_bdevs - num_parity_strips;
 
 	return 0;
 }
@@ -1041,21 +1060,6 @@ raid_bdev_create(const char *name, uint32_t strip_size, uint8_t num_base_bdevs,
 		return -ENOMEM;
 	}
 
-	int ret;
-
-	switch (level) {
-	case RAID1:
-		ret = raid_merge_info_alloc(1, num_base_bdevs, &(raid_bdev->merge_info));
-		break;
-	case RAID0:
-		ret = raid_merge_info_alloc(0, num_base_bdevs, &(raid_bdev->merge_info));
-		break;
-	default:
-		raid_bdev->merge_info = NULL;
-	}
-
-	if (ret) { return ret; }
-
 	raid_bdev->module = module;
 	raid_bdev->num_base_bdevs = num_base_bdevs;
 	raid_bdev->base_bdev_info = calloc(raid_bdev->num_base_bdevs,
@@ -1078,6 +1082,11 @@ raid_bdev_create(const char *name, uint32_t strip_size, uint8_t num_base_bdevs,
 	raid_bdev->state = RAID_BDEV_STATE_CONFIGURING;
 	raid_bdev->level = level;
 	raid_bdev->min_base_bdevs_operational = min_operational;
+
+	int ret = raid_merge_info_alloc(raid_bdev);
+	if (ret) {
+		return ret;
+	}
 
 	raid_bdev_gen = &raid_bdev->bdev;
 

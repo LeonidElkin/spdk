@@ -92,6 +92,9 @@ struct raid_bdev_io {
 	/* Context of the original channel for this IO */
 	struct raid_bdev_io_channel	*raid_ch;
 
+	/* Stripe tree IO belongs to */
+	struct raid_request_tree *stripe_tree;
+
 	/* Used for tracking progress on io requests sent to member disks. */
 	uint64_t			base_bdev_io_remaining;
 	uint8_t				base_bdev_io_submitted;
@@ -247,9 +250,6 @@ struct raid_bdev_module {
 
 	/* Handler for write merged requests */
 	void (*poller_request)(struct raid_bdev_io *raid_io);
-
-	/* Handler for write merged requests */
-	void (*completion)(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg);
 
 	/* Handler for requests without payload (flush, unmap). Optional. */
 	void (*submit_null_payload_request)(struct raid_bdev_io *raid_io);

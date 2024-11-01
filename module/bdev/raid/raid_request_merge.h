@@ -20,13 +20,7 @@
 #define POLLER_MERGE_PERIOD_MILLISECONDS 500
 
 struct raid_bdev_merge_info {
-	/* Hashtable responsible for merging requests */
 	ht *merge_ht;
-
-	/* number of parity strips */
-	uint8_t num_parity_strip;
-
-	/* stripe size for this bdev */
 	uint8_t max_tree_size;
 };
 
@@ -46,8 +40,10 @@ struct raid_request_tree {
 
 
 void raid_clear_ht(struct raid_bdev *raid_bdev);
-int raid_add_request_to_ht(struct raid_bdev_io *raid_io);
 int raid_request_merge_poller(void *args);
+void raid_submit_rw_request_with_merge(struct raid_bdev_io *raid_io);
+void raid_merge_other_requests_handler(bool success, struct raid_request_tree *stripe_tree);
+void raid_remove_min(struct raid_request_tree *stripe_tree);
 
 
 #endif /* SPDK_BDEV_RAID_MERGE_REQUESTS_INTERNAL_H*/
