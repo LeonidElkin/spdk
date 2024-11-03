@@ -16,8 +16,10 @@
 #include "ht.h"
 
 #define MAX_HT_STRING_LEN 35
-#define WAIT_FOR_REQUEST_TIME_SECONDS 0.001
-#define POLLER_MERGE_PERIOD_MILLISECONDS 1
+#define WAIT_FOR_REQUEST_TIME_MULTIPLIER 1000000
+#define WAIT_FOR_REQUEST_TIME_LIMIT_MICROSECONDS 10
+#define WAIT_FOR_REQUEST_DESTROY_TIME_LIMIT_MICROSECONDS 1000000
+#define POLLER_MERGE_PERIOD_MICROSECONDS 10
 
 struct raid_bdev_merge_info {
 	ht *merge_ht;
@@ -32,8 +34,9 @@ struct raid_write_request {
 
 struct raid_request_tree {
 	RB_HEAD(raid_addr_tree, raid_write_request) tree;
-	uint64_t size;
+	uint8_t size;
 	uint64_t last_request_time;
+	bool is_pollable;
 	struct spdk_poller *merge_request_poller;
 	struct raid_bdev *raid_bdev;
 	char *stripe_key;

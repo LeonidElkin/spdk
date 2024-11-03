@@ -1,0 +1,15 @@
+[global]
+thread=1
+ioengine=libaio
+group_reporting=1
+direct=1
+do_verify=1
+verify=sha256
+size=500M
+iodepth=32
+rw=write
+bs=8K
+
+[test]
+filename=/dev/ublkb1
+numjobs=1
