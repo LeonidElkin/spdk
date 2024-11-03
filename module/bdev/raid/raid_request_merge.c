@@ -58,6 +58,14 @@ reset_tree(struct raid_request_tree *tree)
 	tree->is_pollable = true;
 }
 
+
+/**
+ * Clear the hash table of raid requests.
+ *
+ * This function clears the hash table, and then destroys it.
+ *
+ * @param raid_bdev The raid bdev to operate on.
+ */
 void
 raid_clear_ht(struct raid_bdev *raid_bdev)
 {
@@ -182,6 +190,15 @@ raid_create_big_write_request(struct raid_bdev_io **_new_raid_io, struct raid_re
 	return 0;
 }
 
+/**
+ * raid_other_requests_handler - free merged requests and complete them with
+ *                               the result of the merged request
+ *
+ * @raid_io: pointer to the merged request
+ *
+ * Free the iovecs and the merged requests itself and complete them with the
+ * result of the merged request.
+ */
 void
 raid_other_requests_handler(struct raid_bdev_io *raid_io) 
 {
@@ -320,7 +337,6 @@ raid_add_request_to_ht(struct raid_bdev_io *raid_io)
 	}
 
 	if (stripe_tree->size == stripe_tree->raid_bdev->merge_info->max_tree_size) {
-		SPDK_ERRLOG("MAX_TREE_SIZE!\n");
 		stripe_tree->is_pollable = false;
 		ret = raid_execute_big_request(stripe_tree);
 		if (ret) {
@@ -332,6 +348,20 @@ raid_add_request_to_ht(struct raid_bdev_io *raid_io)
 	return 0;
 }
 
+/**
+ * Submit a read or write request to the raid bdev module, with support for merging
+ * multiple write requests on a per-stripe basis.
+ *
+ * If the request is a write request, and the raid bdev module has been configured to
+ * merge requests, the request is added to the hash table of stripe trees. If the
+ * stripe is already in the hash table, the request is merged with any existing
+ * requests in the stripe. If the stripe is not in the hash table, a new stripe tree
+ * is created and the request is added to it. Once the maximum number of requests
+ * in a stripe tree has been reached, the stripe tree is executed and removed from
+ * the hash table.
+ *
+ * @param raid_io Pointer to the raid bdev io to be submitted.
+ */
 void
 raid_submit_rw_request_with_merge(struct raid_bdev_io *raid_io)
 {
@@ -353,6 +383,17 @@ raid_submit_rw_request_with_merge(struct raid_bdev_io *raid_io)
 	}
 }
 
+/**
+ * Poller function to merge requests on a per-stripe basis. Periodically checks
+ * if the stripe is pollable and if the time since the last request has exceeded
+ * the wait time limit. If so, merge all the requests in the stripe and
+ * execute the merged request. Additionally, remove the stripe from the hash
+ * table and free the stripe tree after the destroy time limit has been exceeded.
+ *
+ * @param args Pointer to the stripe tree of the stripe to be processed.
+ *
+ * @return 0 on success, non-zero on failure.
+ */
 int
 raid_request_merge_poller(void *args)
 {
@@ -366,8 +407,6 @@ raid_request_merge_poller(void *args)
 
 	if (stripe_tree && stripe_tree->is_pollable && 
 		(current_time - stripe_tree->last_request_time > WAIT_FOR_REQUEST_TIME_LIMIT_MICROSECONDS) && (stripe_tree->size != 0)) {
-
-		SPDK_ERRLOG("MY POLLER %lu - %lu\n", current_time, stripe_tree->last_request_time);
 
 		ret = raid_execute_big_request(stripe_tree);
 
