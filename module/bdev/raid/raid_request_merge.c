@@ -34,9 +34,11 @@ clear_tree(struct raid_request_tree *tree)
 		RB_REMOVE(raid_addr_tree, &tree->tree, current_request);
 		previous_request = current_request;
 	}
+
 	free(previous_request);
-	tree->size = 0;
-	spdk_poller_unregister(&(tree->merge_request_poller));
+	if (tree->merge_request_poller) spdk_poller_unregister(&(tree->merge_request_poller));
+	free(tree->stripe_key);
+	free(tree);
 }
 
 void
@@ -46,24 +48,11 @@ raid_clear_ht(struct raid_bdev *raid_bdev)
 	hti hti = ht_iterator(ht);
 
 	for (bool i = ht_next(&hti); i; i = ht_next(&hti)) {
-		clear_tree(hti.value);
+		ht_remove(ht, hti.key);
+		if (hti.value) clear_tree(hti.value);
 	}
 
 	ht_destroy(ht);
-}
-
-static void
-raid_bdev_io_merge_completion(struct raid_bdev_io *raid_io, bool success)
-{
-	struct spdk_bdev_io *bdev_io = spdk_bdev_io_from_ctx(raid_io);
-
-	spdk_bdev_free_io(bdev_io);
-
-	if (success) {
-		raid_bdev_io_complete(raid_io, SPDK_BDEV_IO_STATUS_SUCCESS);
-	} else {
-		raid_bdev_io_complete(raid_io, SPDK_BDEV_IO_STATUS_FAILED);
-	}
 }
 
 static bool
@@ -103,12 +92,15 @@ raid_get_stripe_key(char *stripe_key, struct raid_bdev_io *raid_io)
 }
 
 static int
-raid_create_big_write_request(struct raid_request_tree *stripe_tree)
+raid_create_big_write_request(struct raid_bdev_io **_new_raid_io, struct raid_request_tree *stripe_tree)
 {
 	struct spdk_bdev_io 		*current_bdev_io;
 	struct spdk_bdev_io 		*min_bdev_io;
 	struct raid_write_request 	*current_request;
 	struct raid_write_request 	*min_request;
+	struct raid_bdev_io 		*new_raid_io;
+	struct raid_bdev_io			**merged_requests;
+	struct spdk_bdev_io			*new_bdev_io;
 	struct iovec 				*new_iovs;
 	int 						acc_iovcnt = 0;
 	int 						iovcnt = 0;
@@ -117,11 +109,16 @@ raid_create_big_write_request(struct raid_request_tree *stripe_tree)
 	min_request = RB_MIN(raid_addr_tree, &stripe_tree->tree);
 	min_bdev_io = spdk_bdev_io_from_ctx(min_request->raid_io);
 
+	merged_requests = calloc(stripe_tree->size, sizeof(struct raid_bdev_io *));
+
 	RB_FOREACH(current_request, raid_addr_tree, &stripe_tree->tree) {
 		current_bdev_io = spdk_bdev_io_from_ctx(current_request->raid_io);
 		iovcnt += current_bdev_io->u.bdev.iovcnt;
 		num_blocks += current_bdev_io->u.bdev.num_blocks;
+		merged_requests[acc_iovcnt++] = current_request->raid_io;
 	}
+
+	acc_iovcnt = 0;
 
 	new_iovs = calloc(iovcnt, sizeof(struct iovec));
 
@@ -130,25 +127,89 @@ raid_create_big_write_request(struct raid_request_tree *stripe_tree)
 		return -ENOMEM;
 	}
 
+	new_bdev_io = calloc(1, sizeof(struct spdk_bdev_io) + sizeof(struct raid_bdev_io));
+
+	if (new_bdev_io == NULL) {
+		SPDK_WARNLOG("Couldn't alloc a new request!\n");
+		free(new_iovs);
+		return -ENOMEM;
+	}
+
 	RB_FOREACH(current_request, raid_addr_tree, &stripe_tree->tree) {
 		current_bdev_io = spdk_bdev_io_from_ctx(current_request->raid_io);
 		for (int i = 0; i < current_bdev_io->u.bdev.iovcnt; ++i) {
 			new_iovs[i + acc_iovcnt].iov_base = current_bdev_io->u.bdev.iovs[i].iov_base;
 			new_iovs[i + acc_iovcnt].iov_len = current_bdev_io->u.bdev.iovs[i].iov_len;
-			current_bdev_io->u.bdev.iovs[i].iov_base = NULL;
-			current_bdev_io->u.bdev.iovs[i].iov_len = 0;
 		}
 		acc_iovcnt += current_bdev_io->u.bdev.iovcnt;
 	}
 
-	min_bdev_io->u.bdev.iovs = new_iovs;
-	min_bdev_io->u.bdev.iovcnt = iovcnt;
-	min_bdev_io->u.bdev.num_blocks = num_blocks;
+	new_bdev_io->u.bdev.iovs = new_iovs;
+	new_bdev_io->u.bdev.iovcnt = iovcnt;
+	new_bdev_io->u.bdev.num_blocks = num_blocks;
+	new_bdev_io->u.bdev.offset_blocks = min_bdev_io->u.bdev.offset_blocks;
+	new_bdev_io->type = SPDK_BDEV_IO_TYPE_WRITE;
+
+	new_raid_io = (struct raid_bdev_io *) new_bdev_io->driver_ctx;
+	new_raid_io->raid_bdev = min_request->raid_io->raid_bdev;
+	new_raid_io->raid_ch = min_request->raid_io->raid_ch;
+	new_raid_io->base_bdev_io_remaining = min_request->raid_io->base_bdev_io_remaining;
+	new_raid_io->base_bdev_io_status = min_request->raid_io->base_bdev_io_status;
+	new_raid_io->base_bdev_io_submitted = min_request->raid_io->base_bdev_io_submitted;
+
+	new_raid_io->merged_requests = merged_requests;
+	new_raid_io->merged_request_count = stripe_tree->size;
+
+	*_new_raid_io = new_raid_io;
 
 	return 0;
+}
+
+void
+raid_other_requests_handler(struct raid_bdev_io *raid_io) 
+{
+	struct spdk_bdev_io *bdev_io = spdk_bdev_io_from_ctx(raid_io);
+
+	if (bdev_io->type != SPDK_BDEV_IO_TYPE_WRITE || raid_io->raid_bdev->merge_info == NULL) {
+		raid_bdev_io_complete(raid_io, raid_io->base_bdev_io_status);
+		return;
+	}
+
+	for (int i = 0; i < raid_io->merged_request_count; ++i) {
+		raid_bdev_io_complete(raid_io->merged_requests[i], raid_io->base_bdev_io_status);
+	}
+
+	free(raid_io->merged_requests);
+	free(bdev_io->u.bdev.iovs);
+
+	free(bdev_io);
 
 }
 
+static int
+raid_execute_big_request(struct raid_request_tree *stripe_tree)
+{
+	struct raid_bdev			*raid_bdev;
+	struct raid_bdev_io			*new_raid_io = NULL;
+	ht							*ht;
+	int							ret;
+
+	raid_bdev = stripe_tree->raid_bdev;
+	ht = raid_bdev->merge_info->merge_ht;
+
+	ret = raid_create_big_write_request(&new_raid_io, stripe_tree);
+	if (ret) {
+		SPDK_WARNLOG("Couldn't create a new request!\n"); 
+		return ret;
+	}
+
+	raid_bdev->module->poller_request(new_raid_io);
+
+	// ht_remove(ht, stripe_tree->stripe_key);
+	// clear_tree(stripe_tree);
+
+	return 0;
+}
 
 static int
 raid_add_request_to_ht(struct raid_bdev_io *raid_io)
@@ -157,7 +218,7 @@ raid_add_request_to_ht(struct raid_bdev_io *raid_io)
 	struct spdk_bdev_io		 	*bdev_io;
 	struct raid_bdev			*raid_bdev;
 	struct raid_request_tree	*stripe_tree;
-	char						stripe_key[MAX_HT_STRING_LEN];
+	char						*stripe_key;
 	ht							*ht;
 	int						 	ret;
 	struct raid_write_request	*old_request;
@@ -190,13 +251,23 @@ raid_add_request_to_ht(struct raid_bdev_io *raid_io)
 	write_request->raid_io = raid_io;
 	write_request->addr = bdev_io->u.bdev.offset_blocks * bdev_io->bdev->blocklen;
 
+	stripe_key = calloc(MAX_HT_STRING_LEN, sizeof(char));
+	if (stripe_key == NULL) {
+		free(write_request);
+		raid_bdev_io_complete(raid_io, SPDK_BDEV_IO_STATUS_FAILED);
+		return -ENOMEM;
+	}
+
 	ret = raid_get_stripe_key(stripe_key, raid_io);
 	if (!ret) {
 		SPDK_WARNLOG("Couldn't identify stripe index\n");
 		raid_bdev_io_complete(raid_io, SPDK_BDEV_IO_STATUS_FAILED);
 		free(write_request);
+		free(stripe_key);
 		return -ENOMEM;
 	}
+
+	SPDK_ERRLOG("STRIPE_KEY: %s\n", stripe_key);
 
 	stripe_tree = ht_get(ht, stripe_key);
 
@@ -206,14 +277,16 @@ raid_add_request_to_ht(struct raid_bdev_io *raid_io)
 		if (stripe_tree == NULL) {
 			SPDK_WARNLOG("Allocation of the tree is failed\n");
 			free(write_request);
+			free(stripe_key);
 			raid_bdev_io_complete(raid_io, SPDK_BDEV_IO_STATUS_FAILED);
 			return -ENOMEM;
 		}
 
-		stripe_tree->merge_request_poller = SPDK_POLLER_REGISTER(raid_request_merge_poller, stripe_tree,
-						    POLLER_MERGE_PERIOD_MILLISECONDS);
+		// stripe_tree->merge_request_poller = SPDK_POLLER_REGISTER(raid_request_merge_poller, stripe_tree,
+		// 				    POLLER_MERGE_PERIOD_MILLISECONDS);
 		stripe_tree->size = 0;
 		stripe_tree->raid_bdev = raid_bdev;
+		stripe_tree->stripe_key = stripe_key;
 
 		RB_INIT(&stripe_tree->tree);
 		ht_set(ht, stripe_key, stripe_tree);
@@ -224,71 +297,31 @@ raid_add_request_to_ht(struct raid_bdev_io *raid_io)
 	old_request = RB_FIND(raid_addr_tree, &stripe_tree->tree, write_request);
 
 	if (old_request == NULL) {
-		SPDK_ERRLOG("NORMAL SCENARIO\n");
+		SPDK_ERRLOG("NORMAL\n");
 		RB_INSERT(raid_addr_tree, &stripe_tree->tree, write_request);
 		stripe_tree->size++;
 	} else {
-		SPDK_ERRLOG("ALREADY GOT REQUEST\n");
+		SPDK_ERRLOG("BRUH\n");
 		RB_REMOVE(raid_addr_tree, &stripe_tree->tree, old_request);
+		raid_bdev_io_complete(old_request->raid_io, SPDK_BDEV_IO_STATUS_SUCCESS);
 		free(old_request);
 		RB_INSERT(raid_addr_tree, &stripe_tree->tree, write_request);
 	}
 
-	stripe_tree->last_request_time = spdk_get_ticks() / spdk_get_ticks_hz();
+	stripe_tree->last_request_time = spdk_get_ticks();
 
-	raid_io->stripe_tree = stripe_tree;
-
-	SPDK_ERRLOG("ADDING IS DONE\n");
-	return 0;
-}
-
-// void
-// raid_merge_other_requests_handler(bool success, struct raid_request_tree *stripe_tree)
-// {
-// 	struct raid_write_request 	*current_request;
-// 	ht 							*ht = NULL;
-// 	bool 						is_info = false;
-// 	char 						stripe_key[MAX_HT_STRING_LEN];
-
-// 	SPDK_ERRLOG("REQUEST_HANDLER!\n");
-
-// 	RB_FOREACH(current_request, raid_addr_tree, &stripe_tree->tree) {
-// 		SPDK_ERRLOG("FIRST REQUEST!\n");
-// 		if (!is_info) {
-// 			raid_get_stripe_key(stripe_key, current_request->raid_io);
-// 			ht = current_request->raid_io->raid_bdev->merge_info->merge_ht;
-// 			is_info = true;
-// 		}
-// 		SPDK_ERRLOG("MERGE_COMPLETION!\n");
-// 		raid_bdev_io_merge_completion(current_request->raid_io, success);
-// 	}
-
-
-
-// 	clear_tree(stripe_tree);
-// 	ht_remove(ht, stripe_key);
-// }
-
-static void
-raid_execute_requests(struct raid_request_tree *stripe_tree)
-{
-	struct raid_write_request	*current_request;
-	struct raid_bdev			*raid_bdev;
-	bool						min = false;
-
-	raid_bdev = stripe_tree->raid_bdev;
-
-	SPDK_ERRLOG("EXECUTING REQUESTS\n");
-
-	RB_FOREACH(current_request, raid_addr_tree, &stripe_tree->tree) {
-		SPDK_ERRLOG("THROW ONE!\n");
-		if (min) {
-			raid_bdev_io_merge_completion(current_request->raid_io, true);
-		} else {
-			raid_bdev->module->poller_request(current_request->raid_io);
-			min = true;
+	if (stripe_tree->size == stripe_tree->raid_bdev->merge_info->max_tree_size) {
+		SPDK_ERRLOG("MAX_TREE_SIZE!\n");
+		ret = raid_execute_big_request(stripe_tree);
+		if (ret) {
+			assert(false);
+			return ret;
 		}
 	}
+
+	SPDK_ERRLOG("ADDED TO HT!\n");
+
+	return 0;
 }
 
 void
@@ -302,10 +335,8 @@ raid_submit_rw_request_with_merge(struct raid_bdev_io *raid_io)
 	raid_bdev = raid_io->raid_bdev;
 
 	if (bdev_io->type != SPDK_BDEV_IO_TYPE_WRITE || raid_bdev->merge_info == NULL) {
-		SPDK_ERRLOG("POLLER SCENARIO\n");
 		raid_bdev->module->poller_request(raid_io);
 	} else {
-		SPDK_ERRLOG("raid_add_request_to_ht\n");
 		ret = raid_add_request_to_ht(raid_io);
 		if (ret) {
 			assert(false);
@@ -317,42 +348,21 @@ raid_submit_rw_request_with_merge(struct raid_bdev_io *raid_io)
 int
 raid_request_merge_poller(void *args)
 {
-	struct raid_bdev			*raid_bdev;
 	struct raid_request_tree	*stripe_tree;
-	// struct raid_write_request	*big_request;
-	char						stripe_key[MAX_HT_STRING_LEN];
-	ht							*ht;
 	uint64_t					current_time;
-	uint8_t					 	max_tree_size;
-	int						 	ret;
+	int							ret;
 
 	stripe_tree = args;
-	raid_bdev = stripe_tree->raid_bdev;
-	ht = raid_bdev->merge_info->merge_ht;
-	current_time = spdk_get_ticks() / spdk_get_ticks_hz();
-	max_tree_size = raid_bdev->merge_info->max_tree_size;
+	current_time = spdk_get_ticks();
 
-	if (stripe_tree != NULL && (stripe_tree->size == max_tree_size ||
-				    (current_time - stripe_tree->last_request_time > WAIT_FOR_REQUEST_TIME))) {
+	if (stripe_tree != NULL && (current_time - stripe_tree->last_request_time > WAIT_FOR_REQUEST_TIME_SECONDS * spdk_get_ticks_hz())) {
 
-		ret = raid_get_stripe_key(stripe_key, (RB_MIN(raid_addr_tree, &stripe_tree->tree))->raid_io);
-		SPDK_ERRLOG("CHECKING SNPRINTF\n");
-		if (!ret) {
-			SPDK_WARNLOG("Couldn't identify stripe index\n");
-			return -ENOMEM;
-		}
+		SPDK_ERRLOG("POLLER\n");
 
-		SPDK_ERRLOG("CREATE_BIG_REQUEST!\n");
-		ret = raid_create_big_write_request(stripe_tree);
+		ret = raid_execute_big_request(stripe_tree);
+
 		if (ret) { return ret; }
-
-		// big_request = RB_MIN(raid_addr_tree, &stripe_tree->tree);
-
-		// SPDK_ERRLOG("EXECUTE BIG REQUEST!\n");
-		// stripe_tree->raid_bdev->module->poller_request(big_request->raid_io);
-		raid_execute_requests(stripe_tree);
-		clear_tree(stripe_tree);
-		ht_remove(ht, stripe_key);
+		
 	}
 
 	return 0;

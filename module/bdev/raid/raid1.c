@@ -177,23 +177,6 @@ raid1_submit_rw_request(struct raid_bdev_io *raid_io)
 	}
 }
 
-static void
-raid1_submit_rw_request_with_merge(struct raid_bdev_io *raid_io)
-{
-	struct spdk_bdev_io *bdev_io = spdk_bdev_io_from_ctx(raid_io);
-	int ret;
-
-	if (bdev_io->type != SPDK_BDEV_IO_TYPE_WRITE) {
-		raid1_submit_rw_request(raid_io);
-	} else {
-		ret = raid_add_request_to_ht(raid_io);
-		if (ret) {
-			assert(false);
-			return;
-		}
-	}
-}
-
 static int
 raid1_start(struct raid_bdev *raid_bdev)
 {
@@ -235,9 +218,8 @@ static struct raid_bdev_module g_raid1_module = {
 	.memory_domains_supported = true,
 	.start = raid1_start,
 	.stop = raid1_stop,
-	.submit_rw_request = raid1_submit_rw_request_with_merge,
+	.submit_rw_request = raid_submit_rw_request_with_merge,
 	.poller_request = raid1_submit_rw_request,
-	.completion = raid1_bdev_io_completion,
 };
 RAID_MODULE_REGISTER(&g_raid1_module)
 

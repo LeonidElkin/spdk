@@ -64,7 +64,7 @@ static void	raid_bdev_deconfigure(struct raid_bdev *raid_bdev,
  * 0 - success
  * non zero - failure
  */
-static int
+int
 raid_bdev_create_cb(void *io_device, void *ctx_buf)
 {
 	struct raid_bdev            *raid_bdev = io_device;
@@ -136,7 +136,7 @@ raid_bdev_create_cb(void *io_device, void *ctx_buf)
  * returns:
  * none
  */
-static void
+void
 raid_bdev_destroy_cb(void *io_device, void *ctx_buf)
 {
 	struct raid_bdev_io_channel *raid_ch = ctx_buf;
@@ -989,7 +989,7 @@ raid_merge_info_alloc(struct raid_bdev *raid_bdev)
  */
 int
 raid_bdev_create(const char *name, uint32_t strip_size, uint8_t num_base_bdevs,
-		 enum raid_level level, struct raid_bdev **raid_bdev_out, const struct spdk_uuid *uuid)
+		 enum raid_level level, struct raid_bdev **raid_bdev_out, const struct spdk_uuid *uuid, uint8_t merge)
 {
 	struct raid_bdev *raid_bdev;
 	struct spdk_bdev *raid_bdev_gen;
@@ -1083,10 +1083,17 @@ raid_bdev_create(const char *name, uint32_t strip_size, uint8_t num_base_bdevs,
 	raid_bdev->level = level;
 	raid_bdev->min_base_bdevs_operational = min_operational;
 
-	int ret = raid_merge_info_alloc(raid_bdev);
-	if (ret) {
-		return ret;
+	if (merge) {
+		int ret = raid_merge_info_alloc(raid_bdev);
+		if (ret) {
+			free(raid_bdev->base_bdev_info);
+			free(raid_bdev);
+			return ret;
+		}
+	} else {
+		raid_bdev->merge_info = NULL;
 	}
+
 
 	raid_bdev_gen = &raid_bdev->bdev;
 

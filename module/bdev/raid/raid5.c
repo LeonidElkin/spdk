@@ -14,6 +14,8 @@
 
 #include "spdk/log.h"
 #include "spdk/likely.h"
+#include "raid_request_merge.h"
+#include "ht.h"
 
 enum raid5_write_type {
 	UNDEFINED = 0,
@@ -977,7 +979,8 @@ raid5_stripe_req_complete(struct raid5_stripe_request *request)
 
 	raid5_free_stripe_request(request);
 
-	raid_bdev_io_complete(raid_io, raid_io->base_bdev_io_status);
+	raid_other_requests_handler(raid_io);
+
 }
 
 static bool
@@ -2922,8 +2925,9 @@ static struct raid_bdev_module g_raid5_module = {
 	.base_bdevs_min = 3,
 	.memory_domains_supported = false,
 	.start = raid5_start,
-	.submit_rw_request = raid5_submit_rw_request,
-	.resize = raid5_resize
+	.submit_rw_request = raid_submit_rw_request_with_merge,
+	.resize = raid5_resize,
+	.poller_request = raid5_submit_rw_request,
 };
 RAID_MODULE_REGISTER(&g_raid5_module)
 

@@ -16,8 +16,8 @@
 #include "ht.h"
 
 #define MAX_HT_STRING_LEN 35
-#define WAIT_FOR_REQUEST_TIME 2
-#define POLLER_MERGE_PERIOD_MILLISECONDS 500
+#define WAIT_FOR_REQUEST_TIME_SECONDS 0.001
+#define POLLER_MERGE_PERIOD_MILLISECONDS 1
 
 struct raid_bdev_merge_info {
 	ht *merge_ht;
@@ -36,14 +36,14 @@ struct raid_request_tree {
 	uint64_t last_request_time;
 	struct spdk_poller *merge_request_poller;
 	struct raid_bdev *raid_bdev;
+	char *stripe_key;
 };
 
 
 void raid_clear_ht(struct raid_bdev *raid_bdev);
 int raid_request_merge_poller(void *args);
 void raid_submit_rw_request_with_merge(struct raid_bdev_io *raid_io);
-void raid_merge_other_requests_handler(bool success, struct raid_request_tree *stripe_tree);
-void raid_remove_min(struct raid_request_tree *stripe_tree);
+void raid_other_requests_handler(struct raid_bdev_io *raid_io);
 
 
 #endif /* SPDK_BDEV_RAID_MERGE_REQUESTS_INTERNAL_H*/

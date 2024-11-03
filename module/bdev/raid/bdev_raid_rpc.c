@@ -128,6 +128,9 @@ struct rpc_bdev_raid_create {
 	/* Base bdevs information */
 	struct rpc_bdev_raid_create_base_bdevs base_bdevs;
 
+	/* Merge raid bdevs*/
+	uint8_t                                 merge;
+
 	/* UUID for this raid bdev */
 	char *uuid;
 };
@@ -196,6 +199,7 @@ static const struct spdk_json_object_decoder rpc_bdev_raid_create_decoders[] = {
 	{"raid_level", offsetof(struct rpc_bdev_raid_create, level), decode_raid_level},
 	{"base_bdevs", offsetof(struct rpc_bdev_raid_create, base_bdevs), decode_base_bdevs},
 	{"uuid", offsetof(struct rpc_bdev_raid_create, uuid), spdk_json_decode_string, true},
+	{"merge", offsetof(struct rpc_bdev_raid_create, merge), spdk_json_decode_uint8, true},
 };
 
 /*
@@ -237,7 +241,7 @@ rpc_bdev_raid_create(struct spdk_jsonrpc_request *request,
 	}
 
 	rc = raid_bdev_create(req.name, req.strip_size_kb, req.base_bdevs.num_base_bdevs,
-			      req.level, &raid_bdev, uuid);
+			      req.level, &raid_bdev, uuid, req.merge);
 	if (rc != 0) {
 		spdk_jsonrpc_send_error_response_fmt(request, rc,
 						     "Failed to create RAID bdev %s: %s",

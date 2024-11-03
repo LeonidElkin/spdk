@@ -92,13 +92,16 @@ struct raid_bdev_io {
 	/* Context of the original channel for this IO */
 	struct raid_bdev_io_channel	*raid_ch;
 
-	/* Stripe tree IO belongs to */
-	struct raid_request_tree *stripe_tree;
-
 	/* Used for tracking progress on io requests sent to member disks. */
 	uint64_t			base_bdev_io_remaining;
 	uint8_t				base_bdev_io_submitted;
 	uint8_t				base_bdev_io_status;
+
+	/* Array of IO requests merged together */
+	struct raid_bdev_io **merged_requests;
+
+	/* Number of IO requests merged together */
+	uint8_t				merged_request_count;
 
 	/* Private data for the raid module */
 	void				*module_private;
@@ -188,7 +191,7 @@ extern struct raid_all_tailq		g_raid_bdev_list;
 typedef void (*raid_bdev_destruct_cb)(void *cb_ctx, int rc);
 
 int raid_bdev_create(const char *name, uint32_t strip_size, uint8_t num_base_bdevs,
-		     enum raid_level level, struct raid_bdev **raid_bdev_out, const struct spdk_uuid *uuid);
+		     enum raid_level level, struct raid_bdev **raid_bdev_out, const struct spdk_uuid *uuid, uint8_t merge);
 void raid_bdev_delete(struct raid_bdev *raid_bdev, raid_bdev_destruct_cb cb_fn, void *cb_ctx);
 int raid_bdev_add_base_device(struct raid_bdev *raid_bdev, const char *name, uint8_t slot);
 struct raid_bdev *raid_bdev_find_by_name(const char *name);
@@ -287,5 +290,7 @@ void raid_bdev_queue_io_wait(struct raid_bdev_io *raid_io, struct spdk_bdev *bde
 			     struct spdk_io_channel *ch, spdk_bdev_io_wait_cb cb_fn);
 void raid_bdev_io_complete(struct raid_bdev_io *raid_io, enum spdk_bdev_io_status status);
 void raid_bdev_module_stop_done(struct raid_bdev *raid_bdev);
+int raid_bdev_create_cb(void *io_device, void *ctx_buf);
+void raid_bdev_destroy_cb(void *io_device, void *ctx_buf);
 
 #endif /* SPDK_BDEV_RAID_INTERNAL_H */

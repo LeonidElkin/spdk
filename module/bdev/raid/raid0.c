@@ -137,14 +137,6 @@ raid0_submit_rw_request(struct raid_bdev_io *raid_io)
 	}
 }
 
-static void
-raid0_submit_rw_request_with_merge(struct raid_bdev_io *raid_io)
-{
-	struct spdk_bdev_io *bdev_io = spdk_bdev_io_from_ctx(raid_io);
-	if (bdev_io->type != SPDK_BDEV_IO_TYPE_WRITE) { raid0_submit_rw_request(raid_io); }
-	else { raid_add_request_to_ht(raid_io); }
-}
-
 /* raid0 IO range */
 struct raid_bdev_io_range {
 	uint64_t	strip_size;
@@ -413,11 +405,10 @@ static struct raid_bdev_module g_raid0_module = {
 	.base_bdevs_min = 1,
 	.memory_domains_supported = true,
 	.start = raid0_start,
-	.submit_rw_request = raid0_submit_rw_request_with_merge,
+	.submit_rw_request = raid_submit_rw_request_with_merge,
 	.submit_null_payload_request = raid0_submit_null_payload_request,
 	.resize = raid0_resize,
 	.poller_request = raid0_submit_rw_request,
-	.completion = raid0_bdev_io_completion,
 };
 RAID_MODULE_REGISTER(&g_raid0_module)
 
