@@ -84,17 +84,18 @@ function run_test_with_fio() {
 
 function run_tests() {
     local dir_sample=$spdk/test/bdev/merge_requests/test;
+    local dir_to_json=$spdk/test/bdev/merge_requests;
     local state=0;
     local res;
     echo -e "\033[34mtest with using fio results\033[0m";
-    for (( i=0; i <= 0; i++ )) do
+    for (( i=0; i <= 3; i++ )) do
         cat $dir_sample$i/info.txt;
         echo;
         if [[ "$state" != "0" ]]; then
             echo -e "result: \033[33mskipped\033[0m";
             continue;
         fi
-        run_test_with_fio $dir_sample$i/start.json $dir_sample$i/stop.json $dir_sample$i/write.fio;
+        run_test_with_fio $dir_to_json/start.json $dir_to_json/stop.json $dir_sample$i/write.fio;
         res=$?;
         if [[ "$res" == 0 ]]; then
             echo -e "write result: \033[32mpassed\033[0m";
@@ -102,6 +103,8 @@ function run_tests() {
             echo -e "write result: \033[31mfailed\033[0m";
             state=1
         fi
+
+        sleep 2;
     done
 }
 

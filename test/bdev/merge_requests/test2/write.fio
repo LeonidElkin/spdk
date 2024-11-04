@@ -6,7 +6,7 @@ direct=1
 do_verify=1
 verify=sha256
 size=100M
-iodepth=1
+iodepth=7
 rw=write
 bs=8K
 
