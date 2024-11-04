@@ -989,7 +989,8 @@ raid_merge_info_alloc(struct raid_bdev *raid_bdev)
  */
 int
 raid_bdev_create(const char *name, uint32_t strip_size, uint8_t num_base_bdevs,
-		 enum raid_level level, struct raid_bdev **raid_bdev_out, const struct spdk_uuid *uuid, uint8_t merge)
+		 enum raid_level level, struct raid_bdev **raid_bdev_out, const struct spdk_uuid *uuid,
+		 uint8_t merge)
 {
 	struct raid_bdev *raid_bdev;
 	struct spdk_bdev *raid_bdev_gen;

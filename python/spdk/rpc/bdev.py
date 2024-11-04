@@ -416,7 +416,7 @@ def bdev_raid_create(client, name, raid_level, base_bdevs, strip_size=None, stri
 
     if strip_size_kb:
         params['strip_size_kb'] = strip_size_kb
-    
+
     if merge:
         params['merge'] = merge
 

@@ -74,7 +74,7 @@ raid_clear_ht(struct raid_bdev *raid_bdev)
 
 	for (bool i = ht_next(&hti); i; i = ht_next(&hti)) {
 		ht_remove(ht, hti.key);
-		if (hti.value) clear_tree(hti.value);
+		if (hti.value) { clear_tree(hti.value); }
 	}
 
 	ht_destroy(ht);
@@ -117,7 +117,8 @@ raid_get_stripe_key(char *stripe_key, struct raid_bdev_io *raid_io)
 }
 
 static int
-raid_create_big_write_request(struct raid_bdev_io **_new_raid_io, struct raid_request_tree *stripe_tree)
+raid_create_big_write_request(struct raid_bdev_io **_new_raid_io,
+			      struct raid_request_tree *stripe_tree)
 {
 	struct spdk_bdev_io 		*current_bdev_io;
 	struct spdk_bdev_io 		*min_bdev_io;
@@ -200,7 +201,7 @@ raid_create_big_write_request(struct raid_bdev_io **_new_raid_io, struct raid_re
  * result of the merged request.
  */
 void
-raid_other_requests_handler(struct raid_bdev_io *raid_io) 
+raid_other_requests_handler(struct raid_bdev_io *raid_io)
 {
 	struct spdk_bdev_io *bdev_io = spdk_bdev_io_from_ctx(raid_io);
 
@@ -228,7 +229,7 @@ raid_execute_big_request(struct raid_request_tree *stripe_tree)
 
 	ret = raid_create_big_write_request(&new_raid_io, stripe_tree);
 	if (ret) {
-		SPDK_WARNLOG("Couldn't create a new request!\n"); 
+		SPDK_WARNLOG("Couldn't create a new request!\n");
 		return ret;
 	}
 
@@ -322,7 +323,8 @@ raid_add_request_to_ht(struct raid_bdev_io *raid_io)
 		free(stripe_key);
 	}
 
-	stripe_tree->last_request_time = spdk_get_ticks() * WAIT_FOR_REQUEST_TIME_MULTIPLIER / spdk_get_ticks_hz();
+	stripe_tree->last_request_time = spdk_get_ticks() * WAIT_FOR_REQUEST_TIME_MULTIPLIER /
+					 spdk_get_ticks_hz();
 
 	old_request = RB_FIND(raid_addr_tree, &stripe_tree->tree, write_request);
 
@@ -405,16 +407,18 @@ raid_request_merge_poller(void *args)
 	stripe_tree = args;
 	current_time = spdk_get_ticks() * WAIT_FOR_REQUEST_TIME_MULTIPLIER / spdk_get_ticks_hz();
 
-	if (stripe_tree && stripe_tree->is_pollable && 
-		(current_time - stripe_tree->last_request_time > WAIT_FOR_REQUEST_TIME_LIMIT_MICROSECONDS) && (stripe_tree->size != 0)) {
+	if (stripe_tree && stripe_tree->is_pollable &&
+	    (current_time - stripe_tree->last_request_time > WAIT_FOR_REQUEST_TIME_LIMIT_MICROSECONDS) &&
+	    (stripe_tree->size != 0)) {
 
 		ret = raid_execute_big_request(stripe_tree);
 
 		if (ret) { return ret; }
-		
+
 	}
 
-	if (current_time - stripe_tree->last_request_time > WAIT_FOR_REQUEST_DESTROY_TIME_LIMIT_MICROSECONDS) {
+	if (current_time - stripe_tree->last_request_time >
+	    WAIT_FOR_REQUEST_DESTROY_TIME_LIMIT_MICROSECONDS) {
 		ht = stripe_tree->raid_bdev->merge_info->merge_ht;
 		ht_remove(ht, stripe_tree->stripe_key);
 		clear_tree(stripe_tree);

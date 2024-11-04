@@ -191,7 +191,8 @@ extern struct raid_all_tailq		g_raid_bdev_list;
 typedef void (*raid_bdev_destruct_cb)(void *cb_ctx, int rc);
 
 int raid_bdev_create(const char *name, uint32_t strip_size, uint8_t num_base_bdevs,
-		     enum raid_level level, struct raid_bdev **raid_bdev_out, const struct spdk_uuid *uuid, uint8_t merge);
+		     enum raid_level level, struct raid_bdev **raid_bdev_out, const struct spdk_uuid *uuid,
+		     uint8_t merge);
 void raid_bdev_delete(struct raid_bdev *raid_bdev, raid_bdev_destruct_cb cb_fn, void *cb_ctx);
 int raid_bdev_add_base_device(struct raid_bdev *raid_bdev, const char *name, uint8_t slot);
 struct raid_bdev *raid_bdev_find_by_name(const char *name);
