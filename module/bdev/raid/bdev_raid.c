@@ -164,7 +164,9 @@ raid_bdev_destroy_cb(void *io_device, void *ctx_buf)
 static void
 raid_free_merge_info(struct raid_bdev *raid_bdev)
 {
-	if (raid_bdev->merge_info) { raid_clear_ht(raid_bdev); }
+	if (raid_bdev->merge_info) {
+		raid_clear_ht(raid_bdev);
+	}
 	free(raid_bdev->merge_info);
 }
 
@@ -942,13 +944,7 @@ raid_merge_info_alloc(struct raid_bdev *raid_bdev)
 
 	switch (raid_bdev->level) {
 	case RAID1:
-		if (raid_bdev->num_base_bdevs % 2 == 1) {
-			SPDK_WARNLOG("Merging requests is not supported for RAID1 with an odd number of base bdevs\n");
-			raid_bdev->merge_info = NULL;
-			return 0;
-		} else {
-			num_parity_strips = raid_bdev->num_base_bdevs / 2;
-		}
+		num_parity_strips = raid_bdev->num_base_bdevs - 1;
 		break;
 	case RAID0:
 		num_parity_strips = 0;
@@ -969,6 +965,14 @@ raid_merge_info_alloc(struct raid_bdev *raid_bdev)
 	}
 
 	raid_bdev->merge_info->merge_ht = ht_create();
+
+	if (raid_bdev->merge_info->merge_ht == NULL) {
+		SPDK_ERRLOG("Couldn't allocate merge hash table\n");
+		free(raid_bdev->merge_info);
+		raid_bdev->merge_info = NULL;
+		return -ENOMEM;
+	}
+
 	raid_bdev->merge_info->max_tree_size = raid_bdev->num_base_bdevs - num_parity_strips;
 
 	return 0;

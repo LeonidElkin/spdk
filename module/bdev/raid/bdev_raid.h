@@ -92,13 +92,13 @@ struct raid_bdev_io {
 	/* Context of the original channel for this IO */
 	struct raid_bdev_io_channel	*raid_ch;
 
+	/* Array of IO requests merged together */
+	struct raid_bdev_io	**merged_requests;
+
 	/* Used for tracking progress on io requests sent to member disks. */
 	uint64_t			base_bdev_io_remaining;
 	uint8_t				base_bdev_io_submitted;
 	uint8_t				base_bdev_io_status;
-
-	/* Array of IO requests merged together */
-	struct raid_bdev_io **merged_requests;
 
 	/* Number of IO requests merged together */
 	uint8_t				merged_request_count;
@@ -153,7 +153,7 @@ struct raid_bdev {
 	enum raid_level			level;
 
 	/* Info required for merging requests */
-	struct raid_bdev_merge_info *merge_info;
+	struct raid_bdev_merge_info	*merge_info;
 
 	/* Set to true if destroy of this raid bdev is started. */
 	bool				destroy_started;

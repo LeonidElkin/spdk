@@ -1,7 +1,5 @@
 /*   SPDX-License-Identifier: BSD-3-Clause
- *   Copyright (C) 2019 Intel Corporation.
  *   All rights reserved.
- *   Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  */
 
 #include "bdev_raid.h"
@@ -74,7 +72,9 @@ raid_clear_ht(struct raid_bdev *raid_bdev)
 
 	for (bool i = ht_next(&hti); i; i = ht_next(&hti)) {
 		ht_remove(ht, hti.key);
-		if (hti.value) { clear_tree(hti.value); }
+		if (hti.value) {
+			clear_tree(hti.value);
+		}
 	}
 
 	ht_destroy(ht);
@@ -413,7 +413,9 @@ raid_request_merge_poller(void *args)
 
 		ret = raid_execute_big_request(stripe_tree);
 
-		if (ret) { return ret; }
+		if (ret) {
+			return ret;
+		}
 
 	}
 

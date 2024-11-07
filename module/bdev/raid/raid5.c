@@ -1,7 +1,5 @@
 /*   SPDX-License-Identifier: BSD-3-Clause
- *   Copyright (C) 2019 Intel Corporation.
  *   All rights reserved.
- *   Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  */
 
 #include "bdev_raid.h"
