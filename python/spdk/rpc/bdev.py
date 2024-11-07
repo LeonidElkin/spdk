@@ -395,7 +395,7 @@ def bdev_raid_get_bdevs(client, category):
     return client.call('bdev_raid_get_bdevs', params)
 
 
-def bdev_raid_create(client, name, raid_level, base_bdevs, strip_size=None, strip_size_kb=None, uuid=None):
+def bdev_raid_create(client, name, raid_level, base_bdevs, strip_size=None, strip_size_kb=None, uuid=None, merge=None):
     """Create raid bdev. Either strip size arg will work but one is required.
 
     Args:
@@ -416,6 +416,9 @@ def bdev_raid_create(client, name, raid_level, base_bdevs, strip_size=None, stri
 
     if strip_size_kb:
         params['strip_size_kb'] = strip_size_kb
+
+    if merge:
+        params['merge'] = merge
 
     if uuid:
         params['uuid'] = uuid

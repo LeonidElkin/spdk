@@ -12,6 +12,8 @@
 #include "spdk/util.h"
 #include "spdk/json.h"
 
+#include "raid_request_merge.h"
+
 static bool g_shutdown_started = false;
 
 /* List of all raid bdevs */
@@ -62,7 +64,7 @@ static void	raid_bdev_deconfigure(struct raid_bdev *raid_bdev,
  * 0 - success
  * non zero - failure
  */
-static int
+int
 raid_bdev_create_cb(void *io_device, void *ctx_buf)
 {
 	struct raid_bdev            *raid_bdev = io_device;
@@ -134,7 +136,7 @@ raid_bdev_create_cb(void *io_device, void *ctx_buf)
  * returns:
  * none
  */
-static void
+void
 raid_bdev_destroy_cb(void *io_device, void *ctx_buf)
 {
 	struct raid_bdev_io_channel *raid_ch = ctx_buf;
@@ -157,6 +159,15 @@ raid_bdev_destroy_cb(void *io_device, void *ctx_buf)
 	}
 	free(raid_ch->base_channel);
 	raid_ch->base_channel = NULL;
+}
+
+static void
+raid_free_merge_info(struct raid_bdev *raid_bdev)
+{
+	if (raid_bdev->merge_info) {
+		raid_clear_ht(raid_bdev);
+	}
+	free(raid_bdev->merge_info);
 }
 
 /*
@@ -185,6 +196,7 @@ raid_bdev_cleanup(struct raid_bdev *raid_bdev)
 
 	TAILQ_REMOVE(&g_raid_bdev_list, raid_bdev, global_link);
 	free(raid_bdev->base_bdev_info);
+	raid_free_merge_info(raid_bdev);
 }
 
 static void
@@ -925,6 +937,47 @@ raid_bdev_init(void)
 	return 0;
 }
 
+static int
+raid_merge_info_alloc(struct raid_bdev *raid_bdev)
+{
+	uint8_t num_parity_strips;
+
+	switch (raid_bdev->level) {
+	case RAID1:
+		num_parity_strips = raid_bdev->num_base_bdevs - 1;
+		break;
+	case RAID0:
+		num_parity_strips = 0;
+		break;
+	case RAID5:
+		num_parity_strips = 1;
+		break;
+	default:
+		raid_bdev->merge_info = NULL;
+		return 0;
+	}
+
+	raid_bdev->merge_info = calloc(1, sizeof(struct raid_bdev_merge_info));
+
+	if (!raid_bdev->merge_info) {
+		SPDK_ERRLOG("Unable to allocate memory for merge info\n");
+		return -ENOMEM;
+	}
+
+	raid_bdev->merge_info->merge_ht = ht_create();
+
+	if (raid_bdev->merge_info->merge_ht == NULL) {
+		SPDK_ERRLOG("Couldn't allocate merge hash table\n");
+		free(raid_bdev->merge_info);
+		raid_bdev->merge_info = NULL;
+		return -ENOMEM;
+	}
+
+	raid_bdev->merge_info->max_tree_size = raid_bdev->num_base_bdevs - num_parity_strips;
+
+	return 0;
+}
+
 /*
  * brief:
  * raid_bdev_create allocates raid bdev based on passed configuration
@@ -940,7 +993,8 @@ raid_bdev_init(void)
  */
 int
 raid_bdev_create(const char *name, uint32_t strip_size, uint8_t num_base_bdevs,
-		 enum raid_level level, struct raid_bdev **raid_bdev_out, const struct spdk_uuid *uuid)
+		 enum raid_level level, struct raid_bdev **raid_bdev_out, const struct spdk_uuid *uuid,
+		 uint8_t merge)
 {
 	struct raid_bdev *raid_bdev;
 	struct spdk_bdev *raid_bdev_gen;
@@ -1033,6 +1087,18 @@ raid_bdev_create(const char *name, uint32_t strip_size, uint8_t num_base_bdevs,
 	raid_bdev->state = RAID_BDEV_STATE_CONFIGURING;
 	raid_bdev->level = level;
 	raid_bdev->min_base_bdevs_operational = min_operational;
+
+	if (merge) {
+		int ret = raid_merge_info_alloc(raid_bdev);
+		if (ret) {
+			free(raid_bdev->base_bdev_info);
+			free(raid_bdev);
+			return ret;
+		}
+	} else {
+		raid_bdev->merge_info = NULL;
+	}
+
 
 	raid_bdev_gen = &raid_bdev->bdev;
 

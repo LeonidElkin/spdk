@@ -12,6 +12,7 @@
 #include "spdk/util.h"
 
 #include "spdk/log.h"
+#include "raid_request_merge.h"
 
 /*
  * brief:
@@ -116,6 +117,7 @@ raid0_submit_rw_request(struct raid_bdev_io *raid_io)
 						 pd_lba, pd_blocks, raid0_bdev_io_completion,
 						 raid_io, &io_opts);
 	} else if (bdev_io->type == SPDK_BDEV_IO_TYPE_WRITE) {
+
 		ret = spdk_bdev_writev_blocks_ext(base_info->desc, base_ch,
 						  bdev_io->u.bdev.iovs, bdev_io->u.bdev.iovcnt,
 						  pd_lba, pd_blocks, raid0_bdev_io_completion,
@@ -403,9 +405,10 @@ static struct raid_bdev_module g_raid0_module = {
 	.base_bdevs_min = 1,
 	.memory_domains_supported = true,
 	.start = raid0_start,
-	.submit_rw_request = raid0_submit_rw_request,
+	.submit_rw_request = raid_submit_rw_request_with_merge,
 	.submit_null_payload_request = raid0_submit_null_payload_request,
 	.resize = raid0_resize,
+	.poller_request = raid0_submit_rw_request,
 };
 RAID_MODULE_REGISTER(&g_raid0_module)
 

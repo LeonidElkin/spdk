@@ -1,0 +1,4 @@
+0:
+    iodepth: 1
+    stripe_size without parity: 7
+    size: 100M

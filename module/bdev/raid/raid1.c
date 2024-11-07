@@ -7,6 +7,8 @@
 
 #include "spdk/likely.h"
 #include "spdk/log.h"
+#include "raid_request_merge.h"
+#include "ht.h"
 
 struct raid1_info {
 	/* The parent raid bdev */
@@ -216,7 +218,8 @@ static struct raid_bdev_module g_raid1_module = {
 	.memory_domains_supported = true,
 	.start = raid1_start,
 	.stop = raid1_stop,
-	.submit_rw_request = raid1_submit_rw_request,
+	.submit_rw_request = raid_submit_rw_request_with_merge,
+	.poller_request = raid1_submit_rw_request,
 };
 RAID_MODULE_REGISTER(&g_raid1_module)
 
